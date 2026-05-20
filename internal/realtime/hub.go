@@ -141,6 +141,27 @@ func (h *Hub) broadcast(roomID uuid.UUID, t string, payload any, exclude *uuid.U
 
 // ---- public broadcaster API used by REST handlers (rooms.Broadcaster) ----
 
+func (h *Hub) BroadcastMemberJoined(roomID uuid.UUID, member rooms.Member) {
+	h.broadcast(roomID, MsgMemberJoined, MemberJoinedPayload{Member: member}, nil)
+}
+
+func (h *Hub) BroadcastMemberLeft(roomID uuid.UUID, userID uuid.UUID) {
+	h.broadcast(roomID, MsgMemberLeft, MemberLeftPayload{UserID: userID}, nil)
+}
+
+func (h *Hub) DisconnectUser(roomID, userID uuid.UUID) {
+	rs := h.roomFor(roomID, false)
+	if rs == nil {
+		return
+	}
+	rs.mu.RLock()
+	c := rs.clients[userID]
+	rs.mu.RUnlock()
+	if c != nil {
+		c.close("left room")
+	}
+}
+
 func (h *Hub) BroadcastMute(roomID, userID uuid.UUID, muted bool, by uuid.UUID) {
 	h.broadcast(roomID, MsgMuted, MutedPayload{UserID: userID, Muted: muted, By: by}, nil)
 }

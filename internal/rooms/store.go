@@ -134,6 +134,21 @@ func (s *Store) EndRoom(ctx context.Context, roomID uuid.UUID) error {
 	return nil
 }
 
+func (s *Store) GetMember(ctx context.Context, roomID, userID uuid.UUID) (Member, error) {
+	var m Member
+	err := s.pool.QueryRow(ctx,
+		`SELECT rm.user_id, u.display_name, u.avatar_url, rm.role, rm.muted, rm.joined_at
+		 FROM room_members rm
+		 JOIN users u ON u.id = rm.user_id
+		 WHERE rm.room_id = $1 AND rm.user_id = $2 AND rm.left_at IS NULL`,
+		roomID, userID,
+	).Scan(&m.UserID, &m.DisplayName, &m.AvatarURL, &m.Role, &m.Muted, &m.JoinedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Member{}, ErrNotFound
+	}
+	return m, err
+}
+
 func (s *Store) ListMembers(ctx context.Context, roomID uuid.UUID) ([]Member, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT rm.user_id, u.display_name, u.avatar_url, rm.role, rm.muted, rm.joined_at

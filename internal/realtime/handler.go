@@ -82,22 +82,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		sendTo(c, MsgSnapshot, snap)
 	}
 
-	// announce join to others
-	members, _ := h.store.ListMembers(r.Context(), roomID)
-	for _, m := range members {
-		if m.UserID == userID {
-			self := userID
-			h.hub.broadcast(roomID, MsgMemberJoined, MemberJoinedPayload{Member: m}, &self)
-			break
-		}
-	}
-
 	ctx, cancel := context.WithCancel(r.Context())
 	go c.writePump(ctx, h.pingInterval)
 	c.readPump(ctx, h.hub) // blocks until disconnect
 	cancel()
 
 	h.hub.leave(roomID, c)
-	self := userID
-	h.hub.broadcast(roomID, MsgMemberLeft, MemberLeftPayload{UserID: userID}, &self)
+	// member_left is broadcast from REST Leave; only announce disconnect if still an active member.
+	if _, _, memErr := h.store.ActiveMembership(r.Context(), roomID, userID); memErr == nil {
+		self := userID
+		h.hub.broadcast(roomID, MsgMemberLeft, MemberLeftPayload{UserID: userID}, &self)
+	}
 }

@@ -15,10 +15,13 @@ import (
 )
 
 type Broadcaster interface {
+	BroadcastMemberJoined(roomID uuid.UUID, member Member)
+	BroadcastMemberLeft(roomID uuid.UUID, userID uuid.UUID)
 	BroadcastMute(roomID, userID uuid.UUID, muted bool, byUserID uuid.UUID)
 	KickConnection(roomID, userID uuid.UUID, byUserID uuid.UUID)
 	BroadcastRoomEnded(roomID uuid.UUID)
 	BroadcastDestination(roomID uuid.UUID, dest *Destination)
+	DisconnectUser(roomID, userID uuid.UUID)
 }
 
 type Service struct {
@@ -77,6 +80,11 @@ func (s *Service) Join(ctx context.Context, userID uuid.UUID, code string) (*Roo
 	if err := s.store.UpsertMember(ctx, room.ID, userID); err != nil {
 		return nil, err
 	}
+	if s.rt != nil {
+		if member, err := s.store.GetMember(ctx, room.ID, userID); err == nil {
+			s.rt.BroadcastMemberJoined(room.ID, member)
+		}
+	}
 	return room, nil
 }
 
@@ -131,7 +139,14 @@ func (s *Service) ClearDestination(ctx context.Context, roomID, actorID uuid.UUI
 }
 
 func (s *Service) Leave(ctx context.Context, roomID, userID uuid.UUID) error {
-	return s.store.MarkLeft(ctx, roomID, userID)
+	if err := s.store.MarkLeft(ctx, roomID, userID); err != nil {
+		return err
+	}
+	if s.rt != nil {
+		s.rt.BroadcastMemberLeft(roomID, userID)
+		s.rt.DisconnectUser(roomID, userID)
+	}
+	return nil
 }
 
 func (s *Service) requireOwner(ctx context.Context, roomID, actorID uuid.UUID) error {
