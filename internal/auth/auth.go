@@ -75,7 +75,7 @@ func (s *Service) HandleGuest(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteErr(w, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, tokenResponse{Token: token, User: u})
+	httpx.JSON(w, http.StatusCreated, tokenResponse{Token: token, User: u})
 }
 
 func (s *Service) HandleMe(w http.ResponseWriter, r *http.Request) {

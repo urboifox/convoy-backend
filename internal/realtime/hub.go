@@ -167,7 +167,10 @@ func (h *Hub) BroadcastMute(roomID, userID uuid.UUID, muted bool, by uuid.UUID) 
 }
 
 func (h *Hub) KickConnection(roomID, userID, by uuid.UUID) {
-	h.broadcast(roomID, MsgKicked, KickedPayload{UserID: userID, By: by}, nil)
+	// notify other members first so the kicked user's frame can't race ahead of
+	// the socket close on a slow link
+	exclude := userID
+	h.broadcast(roomID, MsgKicked, KickedPayload{UserID: userID, By: by}, &exclude)
 
 	rs := h.roomFor(roomID, false)
 	if rs == nil {
@@ -176,9 +179,14 @@ func (h *Hub) KickConnection(roomID, userID, by uuid.UUID) {
 	rs.mu.RLock()
 	c := rs.clients[userID]
 	rs.mu.RUnlock()
-	if c != nil {
-		c.close("kicked")
+	if c == nil {
+		return
 	}
+
+	// enqueue the kicked frame directly to the target and let writePump drain it
+	// before the socket is closed (writePump.drainSend handles the race)
+	sendTo(c, MsgKicked, KickedPayload{UserID: userID, By: by})
+	c.close("kicked")
 }
 
 func (h *Hub) BroadcastDestination(roomID uuid.UUID, dest *rooms.Destination) {
@@ -186,8 +194,6 @@ func (h *Hub) BroadcastDestination(roomID uuid.UUID, dest *rooms.Destination) {
 }
 
 func (h *Hub) BroadcastRoomEnded(roomID uuid.UUID) {
-	h.broadcast(roomID, MsgRoomEnded, nil, nil)
-
 	rs := h.roomFor(roomID, false)
 	if rs == nil {
 		return
@@ -198,6 +204,12 @@ func (h *Hub) BroadcastRoomEnded(roomID uuid.UUID) {
 		conns = append(conns, c)
 	}
 	rs.mu.RUnlock()
+
+	// enqueue, then close — writePump drains pending sends on close so each
+	// client receives the room_ended frame before the socket disappears
+	for _, c := range conns {
+		sendTo(c, MsgRoomEnded, nil)
+	}
 	for _, c := range conns {
 		c.close("room ended")
 	}

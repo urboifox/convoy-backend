@@ -1,0 +1,41 @@
+# Example nginx site for convoy.arabic4u.org → Go API on 127.0.0.1:8080
+# Copy/adapt into /etc/nginx/sites-available/ and symlink sites-enabled.
+#
+# Without the map + Upgrade headers, /ws returns HTTP 426 and the app cannot
+# share live location (POST /auth/guest and REST still work).
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name convoy.arabic4u.org;
+
+    # ssl_certificate ...;
+    # ssl_certificate_key ...;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Required for WebSocket /ws (coder/websocket)
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+}
+
+# Optional: force HTTPS (use 308 so POST is not turned into GET on redirect)
+server {
+    listen 80;
+    server_name convoy.arabic4u.org;
+    return 308 https://$host$request_uri;
+}

@@ -27,6 +27,7 @@ type client struct {
 
 	closeOnce sync.Once
 	closed    chan struct{}
+	reason    string
 }
 
 func newClient(conn *websocket.Conn, user auth.User, roomID uuid.UUID) *client {
@@ -49,39 +50,76 @@ func (c *client) enqueue(b []byte) {
 	}
 }
 
+// close signals the read/write pumps to exit. The actual conn.Close is performed
+// by writePump after any pending frames are drained, so terminal events like
+// "kicked" or "room_ended" still reach the client.
 func (c *client) close(reason string) {
 	c.closeOnce.Do(func() {
+		c.reason = reason
 		close(c.closed)
-		_ = c.conn.Close(websocket.StatusNormalClosure, reason)
 	})
+}
+
+func (c *client) shutdown(reason string) {
+	_ = c.conn.Close(websocket.StatusNormalClosure, reason)
 }
 
 func (c *client) writePump(ctx context.Context, pingInterval time.Duration) {
 	ping := time.NewTicker(pingInterval)
 	defer ping.Stop()
+	defer func() {
+		reason := c.reason
+		if reason == "" {
+			reason = "closed"
+		}
+		c.shutdown(reason)
+	}()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-c.closed:
+			// drain anything still queued so terminal events ("kicked"/"room_ended")
+			// reach the client before the socket actually closes
+			c.drainSend(ctx)
 			return
 		case msg := <-c.send:
-			wctx, cancel := context.WithTimeout(ctx, writeTimeout)
-			err := c.conn.Write(wctx, websocket.MessageText, msg)
-			cancel()
-			if err != nil {
-				c.close("write error")
+			if !c.write(ctx, msg) {
 				return
 			}
 		case <-ping.C:
-			wctx, cancel := context.WithTimeout(ctx, writeTimeout)
-			err := c.conn.Ping(wctx)
+			pctx, cancel := context.WithTimeout(ctx, writeTimeout)
+			err := c.conn.Ping(pctx)
 			cancel()
 			if err != nil {
 				c.close("ping failed")
 				return
 			}
+		}
+	}
+}
+
+func (c *client) write(ctx context.Context, msg []byte) bool {
+	wctx, cancel := context.WithTimeout(ctx, writeTimeout)
+	err := c.conn.Write(wctx, websocket.MessageText, msg)
+	cancel()
+	if err != nil {
+		c.close("write error")
+		return false
+	}
+	return true
+}
+
+func (c *client) drainSend(ctx context.Context) {
+	for {
+		select {
+		case msg := <-c.send:
+			if !c.write(ctx, msg) {
+				return
+			}
+		default:
+			return
 		}
 	}
 }
