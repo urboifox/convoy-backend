@@ -1,0 +1,143 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	chimw "github.com/go-chi/chi/v5/middleware"
+
+	"github.com/convoy/backend/internal/auth"
+	"github.com/convoy/backend/internal/config"
+	"github.com/convoy/backend/internal/db"
+	"github.com/convoy/backend/internal/httpx"
+	lk "github.com/convoy/backend/internal/livekit"
+	"github.com/convoy/backend/internal/realtime"
+	"github.com/convoy/backend/internal/rooms"
+)
+
+func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
+
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("config", "err", err)
+		os.Exit(1)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	pool, err := db.Connect(ctx, cfg.DatabaseURL)
+	if err != nil {
+		slog.Error("db connect", "err", err)
+		os.Exit(1)
+	}
+	defer pool.Close()
+
+	if err := db.Migrate(ctx, pool); err != nil {
+		slog.Error("db migrate", "err", err)
+		os.Exit(1)
+	}
+
+	authSvc := auth.NewService(pool, cfg.JWTSecret, cfg.JWTTTL)
+	roomStore := rooms.NewStore(pool)
+	hub := realtime.NewHub(roomStore)
+	roomSvc := rooms.NewService(roomStore, hub)
+	livekitCfg := lk.Config{
+		URL:       cfg.LiveKitURL,
+		APIKey:    cfg.LiveKitAPIKey,
+		APISecret: cfg.LiveKitAPISecret,
+	}
+	roomHandlers := rooms.NewHandlers(roomSvc, livekitCfg)
+	wsHandler := realtime.NewHandler(hub, authSvc, roomStore, cfg.WSPingInterval)
+
+	r := chi.NewRouter()
+	r.Use(chimw.RealIP)
+	r.Use(chimw.RequestID)
+	r.Use(chimw.Recoverer)
+	r.Use(requestLogger)
+	r.Use(corsMiddleware(cfg.AllowedOrigins))
+
+	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
+
+	r.Post("/auth/guest", authSvc.HandleGuest)
+
+	r.Group(func(r chi.Router) {
+		r.Use(authSvc.Middleware)
+		r.Get("/me", authSvc.HandleMe)
+		r.Route("/rooms", roomHandlers.Routes)
+	})
+
+	r.Handle("/ws", wsHandler)
+
+	srv := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	go func() {
+		slog.Info("listening", "port", cfg.Port)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("http server", "err", err)
+			stop()
+		}
+	}()
+
+	<-ctx.Done()
+	slog.Info("shutting down")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_ = srv.Shutdown(shutdownCtx)
+}
+
+func requestLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		ww := chimw.NewWrapResponseWriter(w, r.ProtoMajor)
+		next.ServeHTTP(ww, r)
+		slog.Info("http",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", ww.Status(),
+			"dur_ms", time.Since(start).Milliseconds(),
+		)
+	})
+}
+
+func corsMiddleware(allowed []string) func(http.Handler) http.Handler {
+	allowAll := len(allowed) == 1 && allowed[0] == "*"
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if allowAll {
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+			} else {
+				for _, a := range allowed {
+					if a == origin {
+						w.Header().Set("Access-Control-Allow-Origin", origin)
+						break
+					}
+				}
+			}
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			w.Header().Set("Access-Control-Max-Age", "300")
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
