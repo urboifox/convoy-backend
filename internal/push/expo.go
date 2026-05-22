@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -89,6 +90,7 @@ func (c *ExpoClient) Send(ctx context.Context, tokens []string, title, body stri
 		}
 		tickets, err := c.send(ctx, batch)
 		if err != nil {
+			slog.Error("expo push: batch transport error", "err", err, "count", len(batch))
 			res.Failed += len(batch)
 			continue
 		}
@@ -98,10 +100,23 @@ func (c *ExpoClient) Send(ctx context.Context, tokens []string, title, body stri
 				continue
 			}
 			res.Failed++
-			if errCode, _ := tk.Details["error"].(string); errCode == "DeviceNotRegistered" {
-				if i < len(batch) {
-					res.InvalidTokens = append(res.InvalidTokens, batch[i].To)
-				}
+			errCode, _ := tk.Details["error"].(string)
+			to := ""
+			if i < len(batch) {
+				to = maskToken(batch[i].To)
+			}
+			// Surface every per-ticket failure — the dashboard summary only
+			// has a counter, so the server log is the only place to see the
+			// real cause (MismatchSenderId / InvalidCredentials / etc).
+			slog.Error("expo push: ticket failed",
+				"to", to,
+				"status", tk.Status,
+				"code", errCode,
+				"message", tk.Message,
+				"details", tk.Details,
+			)
+			if errCode == "DeviceNotRegistered" && i < len(batch) {
+				res.InvalidTokens = append(res.InvalidTokens, batch[i].To)
 			}
 		}
 	}
@@ -141,7 +156,17 @@ func (c *ExpoClient) send(ctx context.Context, msgs []Message) (*tickets, error)
 		return nil, err
 	}
 	if len(t.Errors) > 0 {
+		slog.Error("expo push: top-level errors", "errors", t.Errors)
 		return &t, errors.New("expo push returned errors")
 	}
 	return &t, nil
+}
+
+// maskToken keeps just enough of the token to recognize it in logs without
+// leaking the full registration string.
+func maskToken(t string) string {
+	if len(t) <= 14 {
+		return t
+	}
+	return t[:14] + "…" + t[len(t)-4:]
 }
