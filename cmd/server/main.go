@@ -79,6 +79,12 @@ func main() {
 		httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
+	// Root hits the dashboard. The admin module's own middleware decides
+	// whether to land on /admin/ or /admin/login.
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/admin/", http.StatusFound)
+	})
+
 	r.Post("/auth/guest", authSvc.HandleGuest)
 
 	r.Group(func(r chi.Router) {
