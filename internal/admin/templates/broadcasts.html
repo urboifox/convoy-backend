@@ -1,0 +1,31 @@
+{{ define "content" }}
+<section>
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-extrabold uppercase tracking-tight">Broadcasts</h1>
+        <a href="/admin/broadcasts/new" class="bg-white text-black px-4 py-2 uppercase tracking-widest text-xs font-bold active:opacity-80">New broadcast</a>
+    </div>
+
+    {{ if .Items }}
+        <ul class="divide-y divide-white/10 border-y border-white/10">
+            {{ range .Items }}
+                <li class="py-5">
+                    <div class="flex items-center justify-between gap-3 flex-wrap">
+                        <div class="font-semibold">{{ .Title }}</div>
+                        <div class="text-xs text-white/30">{{ formatTime .SentAt }}</div>
+                    </div>
+                    <p class="text-sm text-white/70 mt-2 whitespace-pre-line break-words">{{ .Body }}</p>
+                    <div class="text-xs uppercase tracking-widest text-white/40 mt-3 flex gap-4">
+                        <span>{{ .Recipients }} sent</span>
+                        <span class="text-emerald-300/70">{{ .Delivered }} ok</span>
+                        {{ if gt .Failed 0 }}<span class="text-red-300/70">{{ .Failed }} failed</span>{{ end }}
+                    </div>
+                </li>
+            {{ end }}
+        </ul>
+    {{ else }}
+        <div class="border border-white/10 p-10 text-center text-white/40 text-sm">
+            No broadcasts sent yet.
+        </div>
+    {{ end }}
+</section>
+{{ end }}

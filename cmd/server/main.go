@@ -13,11 +13,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 
+	"github.com/convoy/backend/internal/admin"
 	"github.com/convoy/backend/internal/auth"
 	"github.com/convoy/backend/internal/config"
 	"github.com/convoy/backend/internal/db"
+	"github.com/convoy/backend/internal/feedback"
 	"github.com/convoy/backend/internal/httpx"
 	lk "github.com/convoy/backend/internal/livekit"
+	"github.com/convoy/backend/internal/push"
 	"github.com/convoy/backend/internal/realtime"
 	"github.com/convoy/backend/internal/rooms"
 )
@@ -58,6 +61,13 @@ func main() {
 	roomHandlers := rooms.NewHandlers(roomSvc, livekitCfg)
 	wsHandler := realtime.NewHandler(hub, authSvc, roomStore, cfg.WSPingInterval)
 
+	feedbackStore := feedback.NewStore(pool)
+	feedbackHandlers := feedback.NewHandlers(feedbackStore)
+
+	pushStore := push.NewStore(pool)
+	pushHandlers := push.NewHandlers(pushStore)
+	expoClient := push.NewExpoClient(cfg.ExpoAccessToken)
+
 	r := chi.NewRouter()
 	r.Use(chimw.RealIP)
 	r.Use(chimw.RequestID)
@@ -75,7 +85,22 @@ func main() {
 		r.Use(authSvc.Middleware)
 		r.Get("/me", authSvc.HandleMe)
 		r.Route("/rooms", roomHandlers.Routes)
+		r.Post("/feedback", feedbackHandlers.Submit)
+		r.Post("/push-tokens", pushHandlers.Save)
 	})
+
+	if adminMod, err := admin.New(admin.Config{
+		Password:     cfg.AdminPassword,
+		CookieSecret: cfg.AdminCookieSecret,
+		Pool:         pool,
+		Feedback:     feedbackStore,
+		Push:         pushStore,
+		Expo:         expoClient,
+	}); err != nil {
+		slog.Info("admin disabled", "reason", err)
+	} else {
+		adminMod.Mount(r)
+	}
 
 	r.Handle("/ws", wsHandler)
 

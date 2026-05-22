@@ -1,0 +1,18 @@
+{{ if .Error }}
+    <div class="border border-red-400/40 text-red-200 px-4 py-3 text-sm">
+        {{ .Error }}
+    </div>
+{{ else }}
+    <div class="border border-emerald-400/30 px-4 py-4">
+        <div class="text-xs uppercase tracking-widest text-emerald-300/70">Sent</div>
+        <div class="mt-2 text-sm">
+            Delivered to <span class="font-semibold">{{ .Delivered }}</span> of {{ .Recipients }} devices.
+            {{ if gt .Failed 0 }}
+                <span class="text-white/60">{{ .Failed }} failed.</span>
+            {{ end }}
+            {{ if gt .Pruned 0 }}
+                <span class="text-white/40">{{ .Pruned }} stale tokens removed.</span>
+            {{ end }}
+        </div>
+    </div>
+{{ end }}

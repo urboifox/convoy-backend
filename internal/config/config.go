@@ -21,6 +21,13 @@ type Config struct {
 	LiveKitURL      string
 	LiveKitAPIKey   string
 	LiveKitAPISecret string
+	// Admin dashboard. Both must be set to enable /admin. CookieSecret signs
+	// the session cookie; rotate it to invalidate every existing session.
+	AdminPassword     string
+	AdminCookieSecret []byte
+	// Optional Expo Push access token; required only for projects whose Expo
+	// account enforces "Enhanced Push Security".
+	ExpoAccessToken string
 }
 
 func Load() (*Config, error) {
@@ -38,6 +45,9 @@ func Load() (*Config, error) {
 		LiveKitURL:      os.Getenv("LIVEKIT_URL"),
 		LiveKitAPIKey:   os.Getenv("LIVEKIT_API_KEY"),
 		LiveKitAPISecret: os.Getenv("LIVEKIT_API_SECRET"),
+		AdminPassword:     os.Getenv("ADMIN_PASSWORD"),
+		AdminCookieSecret: []byte(os.Getenv("ADMIN_COOKIE_SECRET")),
+		ExpoAccessToken:   os.Getenv("EXPO_ACCESS_TOKEN"),
 	}
 
 	if c.DatabaseURL == "" {

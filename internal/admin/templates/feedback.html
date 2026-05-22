@@ -1,0 +1,29 @@
+{{ define "content" }}
+<section>
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-extrabold uppercase tracking-tight">Feedback</h1>
+        <div class="text-xs uppercase tracking-widest text-white/40">{{ if .Entries }}{{ len .Entries }}{{ else }}0{{ end }} entries</div>
+    </div>
+
+    {{ if .Entries }}
+        <ul class="divide-y divide-white/10 border-y border-white/10">
+            {{ range .Entries }}
+                <li class="py-5 flex gap-4">
+                    <div class="w-10 h-10 bg-white/10 flex items-center justify-center text-xs uppercase tracking-widest shrink-0">{{ initials .AuthorName }}</div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-3 flex-wrap">
+                            <span class="text-sm font-semibold">{{ if .AuthorName }}{{ .AuthorName }}{{ else }}<span class="text-white/40">Anonymous</span>{{ end }}</span>
+                            <span class="text-xs text-white/30">{{ formatTime .CreatedAt }}</span>
+                        </div>
+                        <p class="text-sm text-white/80 mt-2 whitespace-pre-line break-words">{{ .Message }}</p>
+                    </div>
+                </li>
+            {{ end }}
+        </ul>
+    {{ else }}
+        <div class="border border-white/10 p-10 text-center text-white/40 text-sm">
+            No feedback yet.
+        </div>
+    {{ end }}
+</section>
+{{ end }}

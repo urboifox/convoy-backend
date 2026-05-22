@@ -1,0 +1,46 @@
+{{ define "content" }}
+<section class="grid grid-cols-1 md:grid-cols-3 gap-px bg-white/10 mb-12">
+    <div class="bg-black p-6">
+        <div class="text-xs uppercase tracking-widest text-white/40">Feedback</div>
+        <div class="text-4xl font-extrabold mt-2">{{ .FeedbackCount }}</div>
+        <a href="/admin/feedback" class="text-xs uppercase tracking-widest text-white/60 hover:text-white mt-4 inline-block">View all →</a>
+    </div>
+    <div class="bg-black p-6">
+        <div class="text-xs uppercase tracking-widest text-white/40">Devices</div>
+        <div class="text-4xl font-extrabold mt-2">{{ .TokenCount }}</div>
+        <div class="text-xs uppercase tracking-widest text-white/40 mt-4">Registered push tokens</div>
+    </div>
+    <div class="bg-black p-6">
+        <div class="text-xs uppercase tracking-widest text-white/40">Broadcasts</div>
+        <div class="text-4xl font-extrabold mt-2">{{ .BroadcastCount }}</div>
+        <a href="/admin/broadcasts/new" class="text-xs uppercase tracking-widest text-white/60 hover:text-white mt-4 inline-block">Compose →</a>
+    </div>
+</section>
+
+<section>
+    <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm uppercase tracking-widest text-white/40">Latest feedback</h2>
+        <a href="/admin/feedback" class="text-xs uppercase tracking-widest text-white/40 hover:text-white">All →</a>
+    </div>
+    {{ if .RecentFeedback }}
+        <ul class="divide-y divide-white/10 border-y border-white/10">
+            {{ range .RecentFeedback }}
+                <li class="py-4 flex gap-4">
+                    <div class="w-9 h-9 bg-white/10 flex items-center justify-center text-xs uppercase tracking-widest">{{ initials .AuthorName }}</div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-3">
+                            <span class="text-sm font-semibold">{{ if .AuthorName }}{{ .AuthorName }}{{ else }}<span class="text-white/40">Anonymous</span>{{ end }}</span>
+                            <span class="text-xs text-white/30">{{ formatTime .CreatedAt }}</span>
+                        </div>
+                        <p class="text-sm text-white/80 mt-1 whitespace-pre-line break-words">{{ .Message }}</p>
+                    </div>
+                </li>
+            {{ end }}
+        </ul>
+    {{ else }}
+        <div class="border border-white/10 p-8 text-center text-white/40 text-sm">
+            No feedback yet.
+        </div>
+    {{ end }}
+</section>
+{{ end }}

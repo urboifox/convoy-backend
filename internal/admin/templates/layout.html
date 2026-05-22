@@ -1,0 +1,43 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }} · Convoy</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+    <script>
+        tailwind.config = { darkMode: 'class' }
+    </script>
+    <style>
+        :root { color-scheme: dark; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif; }
+        .card { border-radius: 0 !important; }
+    </style>
+</head>
+<body class="bg-black text-white min-h-screen antialiased">
+<div class="max-w-6xl mx-auto px-6 py-8">
+    <header class="flex items-center justify-between mb-10">
+        <a href="/admin/" class="flex items-center gap-3">
+            <span class="inline-block w-8 h-8 bg-white"></span>
+            <span class="font-extrabold uppercase tracking-tight text-xl">Convoy</span>
+            <span class="text-white/40 text-sm uppercase tracking-widest">Admin</span>
+        </a>
+        <nav class="flex items-center gap-6 text-sm uppercase tracking-wide">
+            <a href="/admin/" class="{{ if eq .NavActive "dashboard" }}text-white{{ else }}text-white/50 hover:text-white{{ end }}">Overview</a>
+            <a href="/admin/feedback" class="{{ if eq .NavActive "feedback" }}text-white{{ else }}text-white/50 hover:text-white{{ end }}">Feedback</a>
+            <a href="/admin/broadcasts" class="{{ if eq .NavActive "broadcasts" }}text-white{{ else }}text-white/50 hover:text-white{{ end }}">Broadcasts</a>
+            <form method="post" action="/admin/logout" class="inline">
+                <button class="text-white/40 hover:text-white" type="submit">Sign out</button>
+            </form>
+        </nav>
+    </header>
+    <main>
+        {{ block "content" . }}{{ end }}
+    </main>
+    <footer class="mt-16 pt-6 border-t border-white/10 text-white/30 text-xs uppercase tracking-widest">
+        Convoy admin · internal use only
+    </footer>
+</div>
+</body>
+</html>{{end}}
