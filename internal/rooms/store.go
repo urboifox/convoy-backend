@@ -233,10 +233,13 @@ func (s *Store) ActiveMembership(ctx context.Context, roomID, userID uuid.UUID) 
 	return role, muted, err
 }
 
+// ListActiveRoomsForUser returns every room the user is still a member of.
+// `MemberCount` is left at zero here — the service layer fills it in with the
+// live presence count from the realtime hub, so we don't waste a per-row
+// subquery on a value that's about to be overwritten.
 func (s *Store) ListActiveRoomsForUser(ctx context.Context, userID uuid.UUID) ([]ActiveRoom, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT r.id, r.code, r.name, rm.role, rm.joined_at,
-			(SELECT COUNT(*)::int FROM room_members m WHERE m.room_id = r.id AND m.left_at IS NULL)
+		`SELECT r.id, r.code, r.name, rm.role, rm.joined_at
 		 FROM room_members rm
 		 JOIN rooms r ON r.id = rm.room_id
 		 WHERE rm.user_id = $1
@@ -254,7 +257,7 @@ func (s *Store) ListActiveRoomsForUser(ctx context.Context, userID uuid.UUID) ([
 	out := make([]ActiveRoom, 0)
 	for rows.Next() {
 		var ar ActiveRoom
-		if err := rows.Scan(&ar.ID, &ar.Code, &ar.Name, &ar.Role, &ar.JoinedAt, &ar.MemberCount); err != nil {
+		if err := rows.Scan(&ar.ID, &ar.Code, &ar.Name, &ar.Role, &ar.JoinedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, ar)

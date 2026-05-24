@@ -164,6 +164,23 @@ func (c *client) readPump(ctx context.Context, hub *Hub) {
 			self := c.user.ID
 			hub.broadcast(c.roomID, MsgLocation, ev, &self)
 
+		case ClientMsgEmergency:
+			// Payload shape mirrors the server-side event: { active: bool }.
+			// The user can only ever toggle their own emergency, so we
+			// always use `c.user.ID` — clients can't (mis)report on others.
+			var payload struct {
+				Active bool `json:"active"`
+			}
+			if err := json.Unmarshal(env.Payload, &payload); err != nil {
+				sendTo(c, MsgError, ErrorPayload{Message: "invalid emergency"})
+				continue
+			}
+			// Only broadcast on actual transitions to avoid spamming a room
+			// if a client re-sends the same state (e.g. after a reconnect).
+			if hub.SetEmergency(c.roomID, c.user.ID, payload.Active) {
+				hub.BroadcastEmergency(c.roomID, c.user.ID, payload.Active)
+			}
+
 		default:
 			sendTo(c, MsgError, ErrorPayload{Message: "unknown message type"})
 		}

@@ -9,21 +9,25 @@ import (
 )
 
 const (
-	MsgSnapshot        = "snapshot"
-	MsgMemberJoined    = "member_joined"
-	MsgMemberLeft      = "member_left"
-	MsgLocation        = "loc"
-	MsgMuted           = "muted"
-	MsgKicked          = "kicked"
-	MsgRoomEnded       = "room_ended"
-	MsgDestination     = "destination"
-	MsgError           = "error"
-	MsgPong            = "pong"
+	MsgSnapshot      = "snapshot"
+	MsgMemberJoined  = "member_joined"
+	MsgMemberLeft    = "member_left"
+	MsgMemberPresent = "member_present"
+	MsgMemberAbsent  = "member_absent"
+	MsgLocation      = "loc"
+	MsgMuted         = "muted"
+	MsgKicked        = "kicked"
+	MsgRoomEnded     = "room_ended"
+	MsgDestination   = "destination"
+	MsgEmergency     = "emergency"
+	MsgError         = "error"
+	MsgPong          = "pong"
 )
 
 const (
-	ClientMsgLocation = "loc"
-	ClientMsgPing     = "ping"
+	ClientMsgLocation  = "loc"
+	ClientMsgEmergency = "emergency"
+	ClientMsgPing      = "ping"
 )
 
 type Envelope struct {
@@ -52,6 +56,16 @@ type SnapshotPayload struct {
 	Members     []rooms.Member              `json:"members"`
 	Locations   map[uuid.UUID]LocationEvent `json:"locations"`
 	Destination *rooms.Destination          `json:"destination,omitempty"`
+	// PresentUserIDs lists the members currently connected to the room socket.
+	// Members that exist in `Members` but are absent from this list have the
+	// room in their list of active convoys but are not on the room screen
+	// right now (backgrounded app, on home page, etc).
+	PresentUserIDs []uuid.UUID `json:"presentUserIds"`
+	// EmergencyUserIDs lists members who have raised an active emergency.
+	// Live-only state: cleared automatically when a member leaves / goes
+	// absent, so a reconnecting client always re-derives it from the
+	// snapshot rather than relying on retained sets.
+	EmergencyUserIDs []uuid.UUID `json:"emergencyUserIds"`
 }
 
 type DestinationPayload struct {
@@ -66,6 +80,14 @@ type MemberLeftPayload struct {
 	UserID uuid.UUID `json:"userId"`
 }
 
+type MemberPresentPayload struct {
+	UserID uuid.UUID `json:"userId"`
+}
+
+type MemberAbsentPayload struct {
+	UserID uuid.UUID `json:"userId"`
+}
+
 type MutedPayload struct {
 	UserID uuid.UUID `json:"userId"`
 	Muted  bool      `json:"muted"`
@@ -75,6 +97,16 @@ type MutedPayload struct {
 type KickedPayload struct {
 	UserID uuid.UUID `json:"userId"`
 	By     uuid.UUID `json:"by"`
+}
+
+// EmergencyPayload announces a user's emergency state. `Active=true` means
+// they are now requesting help; `Active=false` cleared the request (either
+// the user themselves stood it down, or the server cleared it because they
+// went absent). The flag is included on both transitions so clients can
+// treat the message as a state-set, not a state-toggle.
+type EmergencyPayload struct {
+	UserID uuid.UUID `json:"userId"`
+	Active bool      `json:"active"`
 }
 
 type ErrorPayload struct {

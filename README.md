@@ -43,8 +43,12 @@ GET /ws?room=<uuid>&token=<jwt>
 
 Frames are JSON: `{ "type": "...", "payload": {...} }`.
 
-Client → server: `loc`, `ping`.
-Server → client: `snapshot`, `member_joined`, `member_left`, `loc`, `muted`, `kicked`, `room_ended`, `destination`, `error`, `pong`.
+Client → server: `loc`, `emergency`, `ping`.
+Server → client: `snapshot`, `member_joined`, `member_left`, `member_present`, `member_absent`, `loc`, `muted`, `kicked`, `room_ended`, `destination`, `emergency`, `error`, `pong`.
+
+Membership vs presence: `member_joined`/`member_left` reflect REST mutations (join/leave/kick) — they change who is *saved* in the convoy. `member_present`/`member_absent` fire whenever a member opens or closes the `/ws` connection — they reflect who is currently on the room screen. `/rooms/active.memberCount` and `RoomDetail.presentUserIds` both report live presence, not total saved membership.
+
+Emergencies are live-only state held by the hub: any member can send `emergency` with `{ active: bool }` to raise / clear their own flag, the server broadcasts the same event to everyone, and the flag is cleared automatically when the member goes absent (a second `emergency` event with `active: false` is fanned out in that case). `RoomDetail.emergencyUserIds` and `SnapshotPayload.emergencyUserIds` give a fresh client the current set without waiting for individual events.
 
 ## Architecture
 

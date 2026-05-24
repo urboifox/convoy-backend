@@ -22,6 +22,15 @@ type Broadcaster interface {
 	BroadcastRoomEnded(roomID uuid.UUID)
 	BroadcastDestination(roomID uuid.UUID, dest *Destination)
 	DisconnectUser(roomID, userID uuid.UUID)
+	// PresentUserIDs returns the users currently connected to the room's
+	// websocket. Used by REST handlers so /rooms/active and /rooms/:id can
+	// report live presence alongside membership.
+	PresentUserIDs(roomID uuid.UUID) []uuid.UUID
+	PresentCount(roomID uuid.UUID) int
+	// EmergencyUserIDs returns the users currently flagged as in an active
+	// emergency in the room. Hydrated into REST RoomDetail responses so
+	// a fresh client reads the red routes / banner from the first frame.
+	EmergencyUserIDs(roomID uuid.UUID) []uuid.UUID
 }
 
 type Service struct {
@@ -101,11 +110,35 @@ func (s *Service) Detail(ctx context.Context, roomID uuid.UUID) (*RoomDetail, er
 	if err != nil {
 		return nil, err
 	}
-	return &RoomDetail{Room: *r, Members: members, Destination: dest}, nil
+	detail := &RoomDetail{Room: *r, Members: members, Destination: dest}
+	if s.rt != nil {
+		detail.PresentUserIDs = s.rt.PresentUserIDs(roomID)
+		detail.EmergencyUserIDs = s.rt.EmergencyUserIDs(roomID)
+	} else {
+		detail.PresentUserIDs = []uuid.UUID{}
+		detail.EmergencyUserIDs = []uuid.UUID{}
+	}
+	return detail, nil
 }
 
+// ListActiveForUser returns every active convoy the user belongs to. The
+// `MemberCount` field reports *live presence* — how many members are currently
+// connected to the room's websocket — not the total saved membership.
 func (s *Service) ListActiveForUser(ctx context.Context, userID uuid.UUID) ([]ActiveRoom, error) {
-	return s.store.ListActiveRoomsForUser(ctx, userID)
+	rooms, err := s.store.ListActiveRoomsForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if s.rt != nil {
+		for i := range rooms {
+			rooms[i].MemberCount = s.rt.PresentCount(rooms[i].ID)
+		}
+	} else {
+		for i := range rooms {
+			rooms[i].MemberCount = 0
+		}
+	}
+	return rooms, nil
 }
 
 func (s *Service) SetDestination(ctx context.Context, roomID, actorID uuid.UUID, lat, lng float64) (*Destination, error) {

@@ -75,11 +75,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c := newClient(conn, user, roomID)
-	h.hub.join(roomID, c)
+	becamePresent := h.hub.join(roomID, c)
 
 	snap, err := h.hub.snapshot(r.Context(), roomID, userID)
 	if err == nil {
 		sendTo(c, MsgSnapshot, snap)
+	}
+	// Only announce a new presence transition. If becamePresent is false the
+	// user already had an active socket (we just swapped it under the hood
+	// for a fresher one) and the rest of the room already considers them
+	// present.
+	if becamePresent {
+		h.hub.BroadcastMemberPresent(roomID, userID)
 	}
 
 	ctx, cancel := context.WithCancel(r.Context())
@@ -87,10 +94,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.readPump(ctx, h.hub) // blocks until disconnect
 	cancel()
 
-	h.hub.leave(roomID, c)
-	// member_left is broadcast from REST Leave; only announce disconnect if still an active member.
-	if _, _, memErr := h.store.ActiveMembership(r.Context(), roomID, userID); memErr == nil {
-		self := userID
-		h.hub.broadcast(roomID, MsgMemberLeft, MemberLeftPayload{UserID: userID}, &self)
+	wasPresent, clearedEmergency := h.hub.leave(roomID, c)
+	// Membership and presence are separate concerns: a socket close means
+	// "absent" (still a member, just not on the room screen). Actual
+	// `member_left` events fire from REST Leave / Kick. Skip the broadcast
+	// when the disconnect is just a replaced-by-fresher-socket teardown.
+	if wasPresent {
+		// Order matters here: cancel the emergency first so the rest of the
+		// room can stop chasing a vanishing target before they get told the
+		// user is absent. Both events are fast; the order is what avoids a
+		// flicker where "absent" arrives but the red route persists for a
+		// frame because emergency hadn't been cleared yet.
+		if clearedEmergency {
+			h.hub.BroadcastEmergency(roomID, userID, false)
+		}
+		h.hub.BroadcastMemberAbsent(roomID, userID)
 	}
 }
