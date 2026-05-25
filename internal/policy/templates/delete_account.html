@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="index, follow" />
+    <title>{{ .AppName }} · Delete your account</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { darkMode: 'class' }</script>
+    <style>
+        :root { color-scheme: light dark; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif; }
+        h1, h2 { letter-spacing: -0.01em; }
+        h2 { margin-top: 2.5rem; }
+        ol { list-style: decimal; padding-inline-start: 1.5rem; }
+        ul { list-style: disc; padding-inline-start: 1.5rem; }
+        ol li + li, ul li + li { margin-top: 0.35rem; }
+        p + p, p + ol, p + ul, ol + p, ul + p { margin-top: 0.75rem; }
+    </style>
+</head>
+<body class="bg-white text-zinc-900 dark:bg-black dark:text-zinc-100 antialiased">
+<div class="max-w-3xl mx-auto px-6 py-12">
+    <header class="mb-10 pb-6 border-b border-zinc-200 dark:border-zinc-800">
+        <p class="text-xs uppercase tracking-[3px] text-zinc-500 mb-3">{{ .AppName }}</p>
+        <h1 class="text-3xl font-extrabold">Delete your account</h1>
+        <p class="mt-3 text-sm text-zinc-500">Last updated: {{ .EffectiveDate }}</p>
+    </header>
+
+    <main class="text-[15px] leading-relaxed">
+        <p>This page describes how to delete your {{ .AppName }} account and the data associated with it. You can delete your account at any time directly from inside the app, or — if for any reason you can't access the app — by emailing us using the contact details at the bottom of this page.</p>
+
+        <h2 class="text-xl font-bold">Delete from inside the app</h2>
+        <p>This is the recommended path. It is irreversible after 30 days.</p>
+        <ol>
+            <li>Open the {{ .AppName }} app and sign in with the account you want to delete.</li>
+            <li>From the home screen, tap the <strong>settings icon</strong> (top right).</li>
+            <li>Scroll to the <strong>Danger zone</strong> section.</li>
+            <li>Tap <strong>Delete account</strong>.</li>
+            <li>Read the confirmation dialog, then tap <strong>Delete</strong> to confirm.</li>
+        </ol>
+        <p>You will be signed out and returned to the welcome screen. Your account is now scheduled for permanent deletion.</p>
+
+        <h2 class="text-xl font-bold">Delete by email (fallback)</h2>
+        <p>If you can no longer sign in — for example you lost access to the email address you signed up with, or you uninstalled the app before deleting — send a message to <a href="mailto:{{ .ContactEmail }}" class="underline">{{ .ContactEmail }}</a> with the following:</p>
+        <ul>
+            <li>The email address you used to sign in to {{ .AppName }}.</li>
+            <li>Your display name as it appeared in the app, if you remember it.</li>
+            <li>The sign-in provider you used (Google or Apple).</li>
+            <li>The subject line: <em>"Account deletion request"</em>.</li>
+        </ul>
+        <p>We will verify the request from the email on file and permanently delete the account within 30 days. We may reply asking for additional confirmation if the account information doesn't match exactly.</p>
+
+        <h2 class="text-xl font-bold">What gets deleted</h2>
+        <p>The moment you confirm deletion, we:</p>
+        <ul>
+            <li><strong>Revoke your session</strong> — your existing app session can no longer call our backend, even before the record is purged.</li>
+            <li><strong>End every convoy you owned</strong> — every member is disconnected and the convoy is closed.</li>
+            <li><strong>Remove you from any convoy you had joined</strong> — other members will no longer see you on the map or in the participants list.</li>
+            <li><strong>Delete your push notification tokens</strong> immediately so no further notifications are sent to your devices.</li>
+        </ul>
+
+        <h2 class="text-xl font-bold">Soft-delete window</h2>
+        <p>Your account record is kept in a soft-deleted state for <strong>30 days</strong> after deletion. During this window the record exists but no part of the app or our public API can read it. The window exists for two reasons:</p>
+        <ul>
+            <li><strong>Recovery from accidental deletion</strong> — if you change your mind within 30 days, email <a href="mailto:{{ .ContactEmail }}" class="underline">{{ .ContactEmail }}</a> from the same address on file and we will restore access.</li>
+            <li><strong>Fraud / abuse investigations</strong> — if you were reported by other members shortly before deletion, the record is retained so the issue can be investigated.</li>
+        </ul>
+        <p>After 30 days the account row and all derived data (sign-in identities, convoy membership history, push tokens) are permanently removed.</p>
+
+        <h2 class="text-xl font-bold">What is NOT deleted</h2>
+        <p>The following are kept for legal, security, or operational reasons:</p>
+        <ul>
+            <li><strong>Anonymous server logs</strong> — request timestamps, status codes, and durations are retained for up to 90 days for debugging and abuse prevention. These logs do not contain your name, location, or message contents.</li>
+            <li><strong>Feedback you submitted</strong> — once submitted via the in-app feedback form, your message is kept (without your user identity attached) so we can act on bug reports and feature requests.</li>
+            <li><strong>Aggregated, non-identifying counts</strong> — for example, the total number of convoys ever created. These cannot be traced back to you.</li>
+        </ul>
+
+        <h2 class="text-xl font-bold">What is NEVER stored at all</h2>
+        <p>For clarity, the following are never written to long-term storage and therefore are not "deleted" because they never existed past the live session:</p>
+        <ul>
+            <li>Your precise location (broadcast in real time during an active convoy, then dropped).</li>
+            <li>Voice audio (relayed by LiveKit during voice chat, never recorded).</li>
+            <li>The contents of any in-room communication beyond what is required to operate the convoy.</li>
+        </ul>
+
+        <h2 class="text-xl font-bold">Privacy policy</h2>
+        <p>For the full description of what we collect, why, and how it's protected, see our <a href="/policy" class="underline">privacy policy</a>.</p>
+
+        <h2 class="text-xl font-bold">Contact</h2>
+        <p>Questions about account deletion or this page: <a href="mailto:{{ .ContactEmail }}" class="underline">{{ .ContactEmail }}</a>.</p>
+    </main>
+
+    <footer class="mt-16 pt-6 border-t border-zinc-200 dark:border-zinc-800 text-xs uppercase tracking-[2px] text-zinc-400">
+        {{ .AppName }} &middot; Account deletion
+    </footer>
+</div>
+</body>
+</html>

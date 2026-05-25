@@ -112,10 +112,12 @@ func main() {
 	// whether to render the UpdateRequired screen.
 	r.Get("/config", appConfigStore.Handler)
 
-	// Public privacy policy. Mounted conditionally because the page can't
-	// render without a contact email; admins running locally without one
-	// just don't get the route (linked from settings, which is hidden when
-	// the URL 404s on the client anyway).
+	// Public legal pages — privacy policy and a dedicated account-deletion
+	// landing page (Play Store requires the latter as a standalone URL,
+	// not an anchor in the privacy policy). Both mount conditionally
+	// because they can't render without a contact email; admins running
+	// locally without one just don't get the routes (linked from settings,
+	// which is hidden when the URL 404s on the client anyway).
 	if cfg.PrivacyContactEmail != "" {
 		if pol, err := policy.New(policy.Config{
 			AppName:       cfg.AppName,
@@ -124,8 +126,9 @@ func main() {
 		}); err != nil {
 			slog.Error("policy disabled", "err", err)
 		} else {
-			r.Get("/policy", pol.Handler)
-			slog.Info("policy page enabled")
+			r.Get("/policy", pol.PolicyHandler)
+			r.Get("/delete-account", pol.DeleteAccountHandler)
+			slog.Info("policy + delete-account pages enabled")
 		}
 	} else {
 		slog.Info("policy disabled", "reason", "PRIVACY_CONTACT_EMAIL not set")
