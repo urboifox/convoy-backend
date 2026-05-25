@@ -138,6 +138,7 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(authSvc.Middleware)
 		r.Get("/me", authSvc.HandleMe)
+		r.Patch("/me", authSvc.HandlePatchMe)
 		r.Delete("/account", authSvc.HandleDeleteAccount)
 		r.Route("/rooms", roomHandlers.Routes)
 		r.Post("/feedback", feedbackHandlers.Submit)

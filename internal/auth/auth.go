@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -153,6 +154,72 @@ func (s *Service) HandleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, u)
+}
+
+// updateProfileRequest is the body for PATCH /me. Only fields the user is
+// allowed to change appear here — anything else in the JSON is silently
+// dropped on decode, which keeps surprises off the server side if the
+// client ships fields we don't yet support (e.g. a future `avatarUrl`).
+type updateProfileRequest struct {
+	DisplayName string `json:"displayName"`
+}
+
+// HandlePatchMe lets the signed-in user edit their own profile. Today the
+// only mutable field is the display name; we validate length the same way
+// HandleGuest does (rune-based, not byte-based, so Arabic / emoji names
+// don't get rejected just because they take more bytes than ASCII).
+//
+// Returns the canonical user row after the write so the client can swap in
+// the server's authoritative copy — useful both for trimming and for
+// reflecting any post-write normalisation we add later.
+func (s *Service) HandlePatchMe(w http.ResponseWriter, r *http.Request) {
+	u, ok := FromContext(r.Context())
+	if !ok {
+		httpx.WriteErr(w, httpx.ErrUnauthorized)
+		return
+	}
+
+	var req updateProfileRequest
+	if err := httpx.Decode(r, &req); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+
+	name := strings.TrimSpace(req.DisplayName)
+	if name == "" {
+		httpx.WriteErr(w, httpx.Err(http.StatusBadRequest, "invalid_name", "displayName required"))
+		return
+	}
+	runeLen := utf8.RuneCountInString(name)
+	if runeLen < 2 {
+		httpx.WriteErr(w, httpx.Err(http.StatusBadRequest, "name_too_short", "displayName must be at least 2 characters"))
+		return
+	}
+	if runeLen > 40 {
+		// Truncate by rune (not byte) so we never split a multi-byte
+		// character in half and produce invalid UTF-8 in the column.
+		runes := []rune(name)
+		name = string(runes[:40])
+	}
+
+	var updated User
+	err := s.pool.QueryRow(r.Context(),
+		`UPDATE users SET display_name = $1
+		 WHERE id = $2 AND deleted_at IS NULL
+		 RETURNING id, display_name, avatar_url, email, entitlements`,
+		name, u.ID,
+	).Scan(&updated.ID, &updated.DisplayName, &updated.AvatarURL, &updated.Email, &updated.Entitlements)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Account was deleted between the auth middleware loading it and
+		// this handler running. Treat the same as a stale token.
+		httpx.WriteErr(w, httpx.ErrUnauthorized)
+		return
+	}
+	if err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, updated)
 }
 
 func (s *Service) Issue(userID uuid.UUID) (string, error) {
