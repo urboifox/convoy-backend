@@ -1,0 +1,28 @@
+{{ define "content" }}
+<section class="max-w-2xl">
+    {{ if eq .Flash "saved" }}
+        <div class="border border-emerald-500/30 bg-emerald-500/5 text-emerald-300 text-sm px-4 py-3 mb-6 uppercase tracking-widest">Settings saved</div>
+    {{ end }}
+    {{ if .Err }}
+        <div class="border border-red-500/30 bg-red-500/5 text-red-300 text-sm px-4 py-3 mb-6 uppercase tracking-widest">
+            {{ if eq .Err "bad_version" }}Version must be semver (e.g. 1.0.0){{ else if eq .Err "db" }}Failed to save{{ else }}Invalid request{{ end }}
+        </div>
+    {{ end }}
+
+    <form method="post" action="/admin/settings" class="border border-white/10 p-6 space-y-6">
+        <div>
+            <label class="block text-xs uppercase tracking-widest text-white/40 mb-2">Minimum client version</label>
+            <input type="text" name="min_client_version" value="{{ .MinClientVersion }}" pattern="^\d+\.\d+\.\d+$"
+                   class="w-full bg-white/5 border border-white/10 px-4 py-2 text-sm focus:outline-none focus:border-white/40 font-mono" required />
+            <p class="text-xs text-white/40 mt-2 leading-relaxed">
+                Clients running an older version see the &ldquo;Update required&rdquo; screen on launch and must update before they can sign in. Use <code class="font-mono">0.0.0</code> to disable the gate. Format: <code class="font-mono">major.minor.patch</code>.
+            </p>
+        </div>
+
+        <div class="pt-4 border-t border-white/10 flex items-center gap-3">
+            <button class="text-xs uppercase tracking-widest px-4 py-2 bg-white text-black hover:bg-white/80">Save</button>
+            <a href="/admin/" class="text-xs uppercase tracking-widest text-white/40 hover:text-white">Cancel</a>
+        </div>
+    </form>
+</section>
+{{ end }}

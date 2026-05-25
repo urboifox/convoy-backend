@@ -1,0 +1,65 @@
+{{ define "content" }}
+<section class="mb-6">
+    <form method="get" action="/admin/users" class="flex gap-3">
+        <input type="search" name="q" value="{{ .Query }}" placeholder="Search by name or email…"
+               class="flex-1 bg-white/5 border border-white/10 px-4 py-2 text-sm focus:outline-none focus:border-white/40" />
+        <button class="text-xs uppercase tracking-widest px-4 py-2 bg-white text-black hover:bg-white/80">Search</button>
+        {{ if .Query }}<a href="/admin/users" class="text-xs uppercase tracking-widest px-4 py-2 border border-white/10 hover:border-white/40 self-center">Clear</a>{{ end }}
+    </form>
+</section>
+
+{{ if .Users }}
+<section class="border border-white/10">
+    <table class="w-full text-sm">
+        <thead class="text-xs uppercase tracking-widest text-white/40 bg-white/[0.03]">
+            <tr>
+                <th class="text-left px-4 py-3">User</th>
+                <th class="text-left px-4 py-3">Provider</th>
+                <th class="text-left px-4 py-3">Rooms</th>
+                <th class="text-left px-4 py-3">Joined</th>
+                <th class="text-left px-4 py-3">Status</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-white/10">
+            {{ range .Users }}
+            <tr class="hover:bg-white/[0.04]">
+                <td class="px-4 py-3">
+                    <a href="/admin/users/{{ .ID }}" class="flex items-center gap-3">
+                        <div class="w-8 h-8 bg-white/10 flex items-center justify-center text-[10px] uppercase tracking-widest">{{ initials .DisplayName }}</div>
+                        <div class="min-w-0">
+                            <div class="font-semibold truncate max-w-[18ch]">{{ .DisplayName }}</div>
+                            <div class="text-xs text-white/40 truncate max-w-[28ch]">{{ if .Email }}{{ .Email }}{{ else }}—{{ end }}</div>
+                        </div>
+                    </a>
+                </td>
+                <td class="px-4 py-3">
+                    {{ if .Providers }}
+                        {{ range .Providers }}<span class="text-[10px] uppercase tracking-widest border border-white/10 px-2 py-0.5 mr-1">{{ . }}</span>{{ end }}
+                    {{ else }}
+                        <span class="text-[10px] uppercase tracking-widest text-white/30">guest</span>
+                    {{ end }}
+                </td>
+                <td class="px-4 py-3 text-white/60">
+                    <span title="rooms they own that are active">{{ .ActiveRooms }} owned</span>
+                    <span class="text-white/20 mx-1">·</span>
+                    <span title="rooms they have joined">{{ .JoinedRooms }} joined</span>
+                </td>
+                <td class="px-4 py-3 text-white/50 text-xs">{{ formatTime .CreatedAt }}</td>
+                <td class="px-4 py-3">
+                    {{ if .DeletedAt }}
+                        <span class="text-[10px] uppercase tracking-widest bg-red-500/10 text-red-300 border border-red-500/30 px-2 py-0.5">Deleted</span>
+                    {{ else }}
+                        <span class="text-[10px] uppercase tracking-widest text-emerald-300/80">Active</span>
+                    {{ end }}
+                </td>
+            </tr>
+            {{ end }}
+        </tbody>
+    </table>
+</section>
+{{ else }}
+<div class="border border-white/10 p-8 text-center text-white/40 text-sm">
+    {{ if .Query }}No users match &ldquo;{{ .Query }}&rdquo;.{{ else }}No users yet.{{ end }}
+</div>
+{{ end }}
+{{ end }}

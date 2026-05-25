@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	cfgstore "github.com/convoy/backend/internal/config"
 	"github.com/convoy/backend/internal/feedback"
 	"github.com/convoy/backend/internal/push"
 )
@@ -34,6 +35,9 @@ type Config struct {
 	Feedback     *feedback.Store
 	Push         *push.Store
 	Expo         *push.ExpoClient
+	// AppCfg powers the admin Settings page (edit min_client_version, future
+	// feature flags). Required.
+	AppCfg *cfgstore.AppConfigStore
 }
 
 // Module wires together templates, auth, and HTTP handlers.
@@ -90,7 +94,15 @@ func parsePages(sub fs.FS) (map[string]*template.Template, error) {
 	}
 
 	pages := map[string]*template.Template{}
-	withLayout := []string{"dashboard.html", "feedback.html", "broadcasts.html", "broadcast_new.html"}
+	withLayout := []string{
+		"dashboard.html",
+		"feedback.html",
+		"broadcasts.html",
+		"broadcast_new.html",
+		"users.html",
+		"user_detail.html",
+		"settings.html",
+	}
 	for _, name := range withLayout {
 		clone, err := layout.Clone()
 		if err != nil {
@@ -147,6 +159,15 @@ func (m *Module) Mount(r chi.Router) {
 			r.Get("/broadcasts/new", m.broadcastNewForm)
 			r.Post("/broadcasts", m.broadcastSend)
 			r.Get("/partials/recipient-count", m.recipientCount)
+
+			r.Get("/users", m.usersList)
+			r.Get("/users/{id}", m.userDetail)
+			r.Post("/users/{id}/soft-delete", m.userSoftDelete)
+			r.Post("/users/{id}/restore", m.userRestore)
+			r.Post("/users/{id}/hard-delete", m.userHardDelete)
+
+			r.Get("/settings", m.settingsPage)
+			r.Post("/settings", m.settingsSubmit)
 		})
 	})
 }
@@ -270,15 +291,30 @@ func (m *Module) dashboard(w http.ResponseWriter, r *http.Request) {
 	tokenCount, _ := m.cfg.Push.Count(ctx)
 	broadcastCount, _ := m.store.Count(ctx)
 	recent, _ := m.cfg.Feedback.List(ctx, 5, nil)
+	userCount, deletedCount := m.countUsers(ctx)
 
 	m.render(w, "dashboard.html", map[string]any{
 		"Title":          "Dashboard",
 		"FeedbackCount":  feedbackCount,
 		"TokenCount":     tokenCount,
 		"BroadcastCount": broadcastCount,
+		"UserCount":      userCount,
+		"DeletedCount":   deletedCount,
 		"RecentFeedback": recent,
 		"NavActive":      "dashboard",
 	})
+}
+
+// countUsers is a tiny helper for the dashboard tile. Returns (active,
+// soft-deleted) so the overview can show both numbers without a second
+// roundtrip.
+func (m *Module) countUsers(ctx context.Context) (int, int) {
+	var active, deleted int
+	_ = m.cfg.Pool.QueryRow(ctx,
+		`SELECT count(*) FILTER (WHERE deleted_at IS NULL),
+		        count(*) FILTER (WHERE deleted_at IS NOT NULL)
+		 FROM users`).Scan(&active, &deleted)
+	return active, deleted
 }
 
 func (m *Module) feedbackList(w http.ResponseWriter, r *http.Request) {

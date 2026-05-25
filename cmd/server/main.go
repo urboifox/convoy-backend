@@ -15,11 +15,13 @@ import (
 
 	"github.com/convoy/backend/internal/admin"
 	"github.com/convoy/backend/internal/auth"
+	"github.com/convoy/backend/internal/auth/providers"
 	"github.com/convoy/backend/internal/config"
 	"github.com/convoy/backend/internal/db"
 	"github.com/convoy/backend/internal/feedback"
 	"github.com/convoy/backend/internal/httpx"
 	lk "github.com/convoy/backend/internal/livekit"
+	"github.com/convoy/backend/internal/policy"
 	"github.com/convoy/backend/internal/push"
 	"github.com/convoy/backend/internal/realtime"
 	"github.com/convoy/backend/internal/rooms"
@@ -50,6 +52,26 @@ func main() {
 	}
 
 	authSvc := auth.NewService(pool, cfg.JWTSecret, cfg.JWTTTL)
+	// OAuth verifiers are optional: hosts that haven't configured a
+	// client id for a given provider just keep guest-only auth working.
+	if len(cfg.GoogleClientIDs) > 0 {
+		if v, err := providers.NewGoogleVerifier(ctx, cfg.GoogleClientIDs); err != nil {
+			slog.Error("google verifier", "err", err)
+		} else {
+			authSvc.WithGoogleVerifier(v)
+			slog.Info("google sign-in enabled", "audiences", len(cfg.GoogleClientIDs))
+		}
+	}
+	if len(cfg.AppleClientIDs) > 0 {
+		if v, err := providers.NewAppleVerifier(ctx, cfg.AppleClientIDs); err != nil {
+			slog.Error("apple verifier", "err", err)
+		} else {
+			authSvc.WithAppleVerifier(v)
+			slog.Info("apple sign-in enabled", "audiences", len(cfg.AppleClientIDs))
+		}
+	}
+
+	appConfigStore := config.NewAppConfigStore(pool)
 	roomStore := rooms.NewStore(pool)
 	hub := realtime.NewHub(roomStore)
 	roomSvc := rooms.NewService(roomStore, hub)
@@ -85,11 +107,38 @@ func main() {
 		http.Redirect(w, r, "/admin/", http.StatusFound)
 	})
 
+	// Public runtime config (min-client-version etc). Unauthenticated by
+	// design — the mobile app needs to read it BEFORE sign-in to decide
+	// whether to render the UpdateRequired screen.
+	r.Get("/config", appConfigStore.Handler)
+
+	// Public privacy policy. Mounted conditionally because the page can't
+	// render without a contact email; admins running locally without one
+	// just don't get the route (linked from settings, which is hidden when
+	// the URL 404s on the client anyway).
+	if cfg.PrivacyContactEmail != "" {
+		if pol, err := policy.New(policy.Config{
+			AppName:       cfg.AppName,
+			ContactEmail:  cfg.PrivacyContactEmail,
+			EffectiveDate: cfg.PrivacyEffectiveDate,
+		}); err != nil {
+			slog.Error("policy disabled", "err", err)
+		} else {
+			r.Get("/policy", pol.Handler)
+			slog.Info("policy page enabled")
+		}
+	} else {
+		slog.Info("policy disabled", "reason", "PRIVACY_CONTACT_EMAIL not set")
+	}
+
 	r.Post("/auth/guest", authSvc.HandleGuest)
+	r.Post("/auth/google", authSvc.HandleGoogle)
+	r.Post("/auth/apple", authSvc.HandleApple)
 
 	r.Group(func(r chi.Router) {
 		r.Use(authSvc.Middleware)
 		r.Get("/me", authSvc.HandleMe)
+		r.Delete("/account", authSvc.HandleDeleteAccount)
 		r.Route("/rooms", roomHandlers.Routes)
 		r.Post("/feedback", feedbackHandlers.Submit)
 		r.Post("/push-tokens", pushHandlers.Save)
@@ -102,6 +151,7 @@ func main() {
 		Feedback:     feedbackStore,
 		Push:         pushStore,
 		Expo:         expoClient,
+		AppCfg:       appConfigStore,
 	}); err != nil {
 		slog.Info("admin disabled", "reason", err)
 	} else {

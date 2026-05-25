@@ -1,0 +1,86 @@
+{{ define "content" }}
+<div class="mb-8">
+    <a href="/admin/users" class="text-xs uppercase tracking-widest text-white/40 hover:text-white">← Users</a>
+</div>
+
+<section class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+    <div class="md:col-span-2 border border-white/10 p-6">
+        <div class="flex items-start gap-4">
+            <div class="w-14 h-14 bg-white/10 flex items-center justify-center text-sm uppercase tracking-widest">{{ initials .User.DisplayName }}</div>
+            <div class="flex-1 min-w-0">
+                <h2 class="text-xl font-bold">{{ .User.DisplayName }}</h2>
+                <p class="text-sm text-white/50 mt-1">{{ if .User.Email }}{{ .User.Email }}{{ else }}<span class="text-white/30">no email on file</span>{{ end }}</p>
+                <p class="text-xs text-white/30 mt-2 font-mono break-all">{{ .User.ID }}</p>
+            </div>
+            <div>
+                {{ if .User.DeletedAt }}
+                    <span class="text-[10px] uppercase tracking-widest bg-red-500/10 text-red-300 border border-red-500/30 px-2 py-1">Deleted</span>
+                {{ else }}
+                    <span class="text-[10px] uppercase tracking-widest text-emerald-300/80">Active</span>
+                {{ end }}
+            </div>
+        </div>
+
+        <dl class="grid grid-cols-2 gap-4 mt-6 text-sm">
+            <div>
+                <dt class="text-xs uppercase tracking-widest text-white/40">Joined</dt>
+                <dd class="mt-1">{{ formatTime .User.CreatedAt }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs uppercase tracking-widest text-white/40">Deleted</dt>
+                <dd class="mt-1">{{ if .User.DeletedAt }}{{ formatTime .User.DeletedAt }}{{ else }}<span class="text-white/30">—</span>{{ end }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs uppercase tracking-widest text-white/40">Active rooms owned</dt>
+                <dd class="mt-1">{{ .User.ActiveRooms }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs uppercase tracking-widest text-white/40">Active memberships</dt>
+                <dd class="mt-1">{{ .User.JoinedRooms }}</dd>
+            </div>
+        </dl>
+    </div>
+
+    <div class="border border-white/10 p-6">
+        <h3 class="text-xs uppercase tracking-widest text-white/40 mb-4">Actions</h3>
+        <div class="space-y-3">
+            {{ if .User.DeletedAt }}
+                <form method="post" action="/admin/users/{{ .User.ID }}/restore" class="block">
+                    <button class="w-full text-sm py-2 border border-white/10 hover:bg-white/5 text-emerald-300">Restore account</button>
+                </form>
+            {{ else }}
+                <form method="post" action="/admin/users/{{ .User.ID }}/soft-delete" class="block"
+                      onsubmit="return confirm('Soft-delete this account? Sessions are revoked but the row can be restored.');">
+                    <button class="w-full text-sm py-2 border border-white/10 hover:bg-white/5 text-amber-300">Soft delete</button>
+                </form>
+            {{ end }}
+            <form method="post" action="/admin/users/{{ .User.ID }}/hard-delete" class="block"
+                  onsubmit="return confirm('PERMANENTLY delete this user and every related row? This cannot be undone.');">
+                <button class="w-full text-sm py-2 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-300">Hard delete (irreversible)</button>
+            </form>
+        </div>
+    </div>
+</section>
+
+<section class="mb-12">
+    <h3 class="text-sm uppercase tracking-widest text-white/40 mb-4">Identities</h3>
+    {{ if .Providers }}
+    <div class="border border-white/10 divide-y divide-white/10">
+        {{ range .Providers }}
+        <div class="px-4 py-3 flex items-center gap-4 text-sm">
+            <span class="text-[10px] uppercase tracking-widest border border-white/10 px-2 py-0.5 min-w-[60px] text-center">{{ .Provider }}</span>
+            <div class="flex-1 min-w-0">
+                <div class="font-mono text-xs text-white/70 truncate">{{ .Subject }}</div>
+                {{ if .Email }}<div class="text-xs text-white/40 mt-1">{{ .Email }}</div>{{ end }}
+            </div>
+            <span class="text-xs text-white/30">{{ formatTime .CreatedAt }}</span>
+        </div>
+        {{ end }}
+    </div>
+    {{ else }}
+    <div class="border border-white/10 p-6 text-center text-white/40 text-sm">
+        Guest account (no OAuth identities).
+    </div>
+    {{ end }}
+</section>
+{{ end }}

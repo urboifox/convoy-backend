@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="index, follow" />
+    <title>{{ .AppName }} · Privacy Policy</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { darkMode: 'class' }</script>
+    <style>
+        :root { color-scheme: light dark; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif; }
+        h1, h2, h3 { letter-spacing: -0.01em; }
+        h2 { margin-top: 2.5rem; }
+        h3 { margin-top: 1.5rem; }
+        ul { list-style: disc; padding-inline-start: 1.5rem; }
+        ul li + li { margin-top: 0.25rem; }
+        p + p, p + ul, ul + p { margin-top: 0.75rem; }
+    </style>
+</head>
+<body class="bg-white text-zinc-900 dark:bg-black dark:text-zinc-100 antialiased">
+<div class="max-w-3xl mx-auto px-6 py-12">
+    <header class="mb-10 pb-6 border-b border-zinc-200 dark:border-zinc-800">
+        <p class="text-xs uppercase tracking-[3px] text-zinc-500 mb-3">{{ .AppName }}</p>
+        <h1 class="text-3xl font-extrabold">Privacy Policy</h1>
+        <p class="mt-3 text-sm text-zinc-500">Effective: {{ .EffectiveDate }}</p>
+    </header>
+
+    <main class="text-[15px] leading-relaxed">
+        <p>This policy explains what data {{ .AppName }} (&ldquo;we&rdquo;) collects, why we collect it, who we share it with, and how you can review or delete it. The goal of {{ .AppName }} is to let a small group of people see each other on a shared map and talk over voice in real time. We only collect what is needed to make that work.</p>
+
+        <h2 class="text-xl font-bold">Data we collect</h2>
+
+        <h3 class="text-base font-semibold">1. Account information</h3>
+        <p>When you sign in with Google or Apple we receive your provider-issued user identifier, your name as provided to the sign-in service, your email address (where the provider includes it), and a profile picture URL when one is available. We use these to identify your account on subsequent launches and to label you in convoys. We do <strong>not</strong> receive or store your Google / Apple password.</p>
+
+        <h3 class="text-base font-semibold">2. Precise location</h3>
+        <p>While you are inside an active convoy, the app continuously sends your latitude, longitude, heading, speed, and accuracy to our servers. Other members of the same convoy receive these values in real time so they can see you on the map. Location data is held in memory and broadcast to peers — it is not written to long-term storage on our backend.</p>
+        <p>Location is only collected while you are inside an active convoy. Leaving the room, force-closing the app, or revoking the system permission stops collection immediately.</p>
+
+        <h3 class="text-base font-semibold">3. Microphone audio</h3>
+        <p>If you join voice chat, your microphone audio is streamed to our voice infrastructure (LiveKit) and relayed to the other members of the same convoy. Audio is not recorded, not transcribed, and not stored. The stream ends the moment you leave the room or close the app.</p>
+
+        <h3 class="text-base font-semibold">4. Convoy metadata</h3>
+        <p>We persist the convoy code you create or join, your role within it (owner / member), and timestamps for joining, leaving, and being removed. This is required to determine who has access to which convoy and to render the &ldquo;active convoys&rdquo; list on the home page.</p>
+
+        <h3 class="text-base font-semibold">5. Push notification tokens</h3>
+        <p>When you grant notification permission we register a device-specific push token with Expo&rsquo;s push service. We use it only to deliver convoy-related notifications (e.g. a room ending, an emergency from another member). The token is revoked when you uninstall the app or sign out.</p>
+
+        <h3 class="text-base font-semibold">6. Feedback</h3>
+        <p>Any feedback you submit through the in-app feedback form is stored alongside your user identifier (so we can follow up if needed) and the message text.</p>
+
+        <h3 class="text-base font-semibold">7. Diagnostic data</h3>
+        <p>Our backend logs the standard request metadata you would expect from any web service: timestamp, request path, status code, and request duration. These logs include neither the contents of your messages nor your precise location.</p>
+
+        <h2 class="text-xl font-bold">Who we share data with</h2>
+        <p>{{ .AppName }} does <strong>not</strong> sell your personal data, ever. We share the minimum required with the following processors:</p>
+        <ul>
+            <li><strong>Google / Apple</strong> &mdash; for sign-in. We exchange a short-lived ID token with them to authenticate you. We do not share your location, audio, or messages.</li>
+            <li><strong>Mapbox</strong> &mdash; renders the map and computes driving routes. Your latitude / longitude is sent to Mapbox while the app is displaying the map.</li>
+            <li><strong>LiveKit</strong> &mdash; relays voice audio between convoy members. Audio is transient and never recorded.</li>
+            <li><strong>Expo Push</strong> &mdash; delivers push notifications. Receives only the notification payload and your device token.</li>
+        </ul>
+
+        <h2 class="text-xl font-bold">Retention</h2>
+        <p>Account information, convoy metadata, and feedback are kept for as long as your account exists. Location coordinates and voice audio are <em>not</em> stored beyond live relaying. Push tokens are deleted when you sign out or uninstall.</p>
+
+        <h2 class="text-xl font-bold">Deleting your account</h2>
+        <p>You can delete your account at any time from <strong>Settings &rarr; Delete account</strong> inside the app. Deletion:</p>
+        <ul>
+            <li>Immediately revokes your access &mdash; your existing session can no longer call our API.</li>
+            <li>Ends every convoy you owned and removes you from convoys you had joined.</li>
+            <li>Soft-deletes your account record so that an accidental deletion can be recovered for up to 30 days by contacting us at the address below. After 30 days the record and all derived data is permanently removed.</li>
+        </ul>
+        <p>If you cannot reach the in-app deletion screen for any reason, email <a href="mailto:{{ .ContactEmail }}" class="underline">{{ .ContactEmail }}</a> from the address on file and we will delete your account manually.</p>
+
+        <h2 class="text-xl font-bold">Children</h2>
+        <p>{{ .AppName }} is not directed at children under 13 and we do not knowingly collect data from anyone under that age. If you believe a child has created an account, contact us and we will remove it.</p>
+
+        <h2 class="text-xl font-bold">Your rights</h2>
+        <p>Depending on where you live you may have the right to access, correct, port, or delete the personal data we hold about you, as well as the right to lodge a complaint with your local data-protection authority. Email us at the address below and we will respond within 30 days.</p>
+
+        <h2 class="text-xl font-bold">Security</h2>
+        <p>All traffic between the app and our servers is encrypted in transit (TLS). Voice audio is encrypted by the LiveKit SDK. We do not store passwords because we do not use them &mdash; we rely entirely on Google / Apple sign-in.</p>
+
+        <h2 class="text-xl font-bold">Changes</h2>
+        <p>If we make material changes to this policy we will publish the new version at this URL and surface a notice in the app on next launch. The &ldquo;Effective&rdquo; date above will reflect the current version.</p>
+
+        <h2 class="text-xl font-bold">Contact</h2>
+        <p>Questions, requests, or account-deletion fallback: <a href="mailto:{{ .ContactEmail }}" class="underline">{{ .ContactEmail }}</a>.</p>
+    </main>
+
+    <footer class="mt-16 pt-6 border-t border-zinc-200 dark:border-zinc-800 text-xs uppercase tracking-[2px] text-zinc-400">
+        {{ .AppName }} &middot; Privacy
+    </footer>
+</div>
+</body>
+</html>

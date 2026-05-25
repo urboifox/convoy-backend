@@ -24,8 +24,10 @@
         </a>
         <nav class="flex items-center gap-6 text-sm uppercase tracking-wide">
             <a href="/admin/" class="{{ if eq .NavActive "dashboard" }}text-white{{ else }}text-white/50 hover:text-white{{ end }}">Overview</a>
+            <a href="/admin/users" class="{{ if eq .NavActive "users" }}text-white{{ else }}text-white/50 hover:text-white{{ end }}">Users</a>
             <a href="/admin/feedback" class="{{ if eq .NavActive "feedback" }}text-white{{ else }}text-white/50 hover:text-white{{ end }}">Feedback</a>
             <a href="/admin/broadcasts" class="{{ if eq .NavActive "broadcasts" }}text-white{{ else }}text-white/50 hover:text-white{{ end }}">Broadcasts</a>
+            <a href="/admin/settings" class="{{ if eq .NavActive "settings" }}text-white{{ else }}text-white/50 hover:text-white{{ end }}">Settings</a>
             <form method="post" action="/admin/logout" class="inline">
                 <button class="text-white/40 hover:text-white" type="submit">Sign out</button>
             </form>
