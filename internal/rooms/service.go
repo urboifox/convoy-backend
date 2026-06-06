@@ -23,6 +23,7 @@ type Broadcaster interface {
 	BroadcastRoomEnded(roomID uuid.UUID)
 	BroadcastDestination(roomID uuid.UUID, dest *Destination)
 	BroadcastRoomRenamed(roomID uuid.UUID, name *string)
+	BroadcastChatMessage(roomID uuid.UUID, msg Message)
 	DisconnectUser(roomID, userID uuid.UUID)
 	// PresentUserIDs returns the users currently connected to the room's
 	// websocket. Used by REST handlers so /rooms/active and /rooms/:id can
@@ -54,6 +55,15 @@ const maxCodeAttempts = 8
 const (
 	minRoomNameLen = 1
 	maxRoomNameLen = 40
+)
+
+const (
+	maxMessageLen = 2000
+	// defaultMessagePage / maxMessagePage bound how many chat lines a single
+	// history request returns. The client pages backwards with a cursor, so
+	// these keep any one fetch cheap even on rooms with very long histories.
+	defaultMessagePage = 50
+	maxMessagePage     = 100
 )
 
 func generateCode() (string, error) {
@@ -270,6 +280,43 @@ func (s *Service) End(ctx context.Context, roomID, actorID uuid.UUID) error {
 		s.rt.BroadcastRoomEnded(roomID)
 	}
 	return nil
+}
+
+// PostMessage validates and persists a chat line from an active member, then
+// broadcasts it to everyone else connected to the room. The author is excluded
+// from the broadcast — they already hold the message via this call's response.
+func (s *Service) PostMessage(ctx context.Context, roomID, userID uuid.UUID, body string) (*Message, error) {
+	if _, err := s.AssertMember(ctx, roomID, userID); err != nil {
+		return nil, err
+	}
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return nil, httpx.Err(http.StatusBadRequest, "empty_message", "message cannot be empty")
+	}
+	if utf8.RuneCountInString(body) > maxMessageLen {
+		return nil, httpx.Err(http.StatusBadRequest, "message_too_long", "message is too long")
+	}
+	msg, err := s.store.CreateMessage(ctx, roomID, userID, body)
+	if err != nil {
+		return nil, err
+	}
+	if s.rt != nil {
+		s.rt.BroadcastChatMessage(roomID, *msg)
+	}
+	return msg, nil
+}
+
+// ListMessages returns a page of chat history (newest-first) for an active
+// member. `beforeID` is the cursor — pass nil for the latest page, or the id
+// of the oldest line already held to fetch the previous page.
+func (s *Service) ListMessages(ctx context.Context, roomID, userID uuid.UUID, beforeID *uuid.UUID, limit int) ([]Message, error) {
+	if _, err := s.AssertMember(ctx, roomID, userID); err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > maxMessagePage {
+		limit = defaultMessagePage
+	}
+	return s.store.ListMessages(ctx, roomID, beforeID, limit)
 }
 
 func (s *Service) AssertMember(ctx context.Context, roomID, userID uuid.UUID) (string, error) {

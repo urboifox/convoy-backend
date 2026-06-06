@@ -20,6 +20,7 @@ const (
 	MsgRoomEnded     = "room_ended"
 	MsgRoomRenamed   = "room_renamed"
 	MsgDestination   = "destination"
+	MsgChat          = "chat"
 	MsgEmergency     = "emergency"
 	MsgError         = "error"
 	MsgPong          = "pong"
@@ -75,6 +76,10 @@ type DestinationPayload struct {
 
 type RoomRenamedPayload struct {
 	Name *string `json:"name"`
+}
+
+type ChatPayload struct {
+	Message rooms.Message `json:"message"`
 }
 
 type MemberJoinedPayload struct {

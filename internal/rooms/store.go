@@ -278,3 +278,58 @@ func (s *Store) ListActiveRoomsForUser(ctx context.Context, userID uuid.UUID) ([
 	}
 	return out, rows.Err()
 }
+
+// CreateMessage inserts a chat line and returns it joined with the author's
+// current display name / avatar in a single round-trip.
+func (s *Store) CreateMessage(ctx context.Context, roomID, userID uuid.UUID, body string) (*Message, error) {
+	var m Message
+	err := s.pool.QueryRow(ctx,
+		`WITH ins AS (
+		     INSERT INTO messages (room_id, user_id, body)
+		     VALUES ($1, $2, $3)
+		     RETURNING id, room_id, user_id, body, created_at
+		 )
+		 SELECT ins.id, ins.room_id, ins.user_id, u.display_name, u.avatar_url, ins.body, ins.created_at
+		 FROM ins JOIN users u ON u.id = ins.user_id`,
+		roomID, userID, body,
+	).Scan(&m.ID, &m.RoomID, &m.UserID, &m.DisplayName, &m.AvatarURL, &m.Body, &m.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// ListMessages returns up to `limit` messages newest-first. When `beforeID` is
+// set, only messages strictly older than that message are returned — the
+// client passes the id of the oldest line it already holds to page backwards.
+// Ordering and the cursor both use (created_at, id) so ties on created_at are
+// broken deterministically and never skip or repeat a row across pages.
+func (s *Store) ListMessages(ctx context.Context, roomID uuid.UUID, beforeID *uuid.UUID, limit int) ([]Message, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT m.id, m.room_id, m.user_id, u.display_name, u.avatar_url, m.body, m.created_at
+		 FROM messages m
+		 JOIN users u ON u.id = m.user_id
+		 WHERE m.room_id = $1
+		   AND (
+		       $2::uuid IS NULL
+		       OR (m.created_at, m.id) < (SELECT created_at, id FROM messages WHERE id = $2)
+		   )
+		 ORDER BY m.created_at DESC, m.id DESC
+		 LIMIT $3`,
+		roomID, beforeID, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]Message, 0, limit)
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(&m.ID, &m.RoomID, &m.UserID, &m.DisplayName, &m.AvatarURL, &m.Body, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}

@@ -36,6 +36,20 @@ type Destination struct {
 	SetBy uuid.UUID `json:"setBy"`
 }
 
+// Message is a single persisted chat line. DisplayName / AvatarURL are
+// denormalised from the author's user row at read time so a client can
+// render the message without a separate lookup (and historic messages keep
+// showing the author even after they leave the room).
+type Message struct {
+	ID          uuid.UUID `json:"id"`
+	RoomID      uuid.UUID `json:"roomId"`
+	UserID      uuid.UUID `json:"userId"`
+	DisplayName string    `json:"displayName"`
+	AvatarURL   *string   `json:"avatarUrl,omitempty"`
+	Body        string    `json:"body"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
 type RoomDetail struct {
 	Room
 	Members     []Member     `json:"members"`

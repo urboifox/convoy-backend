@@ -13,7 +13,6 @@ import (
 	"github.com/convoy/backend/internal/rooms"
 )
 
-
 type Handler struct {
 	hub          *Hub
 	auth         *auth.Service

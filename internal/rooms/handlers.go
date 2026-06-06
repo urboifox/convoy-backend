@@ -3,6 +3,7 @@ package rooms
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -13,7 +14,7 @@ import (
 )
 
 type Handlers struct {
-	svc    *Service
+	svc     *Service
 	livekit lk.Config
 }
 
@@ -30,6 +31,8 @@ func (h *Handlers) Routes(r chi.Router) {
 	r.Post("/{roomID}/leave", h.leave)
 	r.Put("/{roomID}/destination", h.putDestination)
 	r.Delete("/{roomID}/destination", h.deleteDestination)
+	r.Get("/{roomID}/messages", h.listMessages)
+	r.Post("/{roomID}/messages", h.postMessage)
 	r.Post("/{roomID}/members/{userID}/mute", h.mute)
 	r.Post("/{roomID}/members/{userID}/kick", h.kick)
 	r.Delete("/{roomID}", h.end)
@@ -271,6 +274,65 @@ func (h *Handlers) deleteDestination(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type sendMessageReq struct {
+	Body string `json:"body"`
+}
+
+func (h *Handlers) postMessage(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.FromContext(r.Context())
+	roomID, err := uuid.Parse(chi.URLParam(r, "roomID"))
+	if err != nil {
+		httpx.WriteErr(w, httpx.ErrBadRequest)
+		return
+	}
+	var req sendMessageReq
+	if err := httpx.Decode(r, &req); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	msg, err := h.svc.PostMessage(r.Context(), roomID, user.ID, req.Body)
+	if err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, msg)
+}
+
+func (h *Handlers) listMessages(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.FromContext(r.Context())
+	roomID, err := uuid.Parse(chi.URLParam(r, "roomID"))
+	if err != nil {
+		httpx.WriteErr(w, httpx.ErrBadRequest)
+		return
+	}
+
+	// Cursor pagination: `before` is the id of the oldest message the client
+	// already holds; omit it for the most recent page.
+	var beforeID *uuid.UUID
+	if raw := r.URL.Query().Get("before"); raw != "" {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			httpx.WriteErr(w, httpx.ErrBadRequest)
+			return
+		}
+		beforeID = &id
+	}
+
+	limit := 0
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil {
+			limit = n
+		}
+	}
+
+	msgs, err := h.svc.ListMessages(r.Context(), roomID, user.ID, beforeID, limit)
+	if err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, msgs)
 }
 
 func (h *Handlers) end(w http.ResponseWriter, r *http.Request) {

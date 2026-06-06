@@ -344,6 +344,14 @@ func (h *Hub) BroadcastRoomRenamed(roomID uuid.UUID, name *string) {
 	h.broadcast(roomID, MsgRoomRenamed, RoomRenamedPayload{Name: name}, nil)
 }
 
+// BroadcastChatMessage fans a freshly-posted chat line out to the room. The
+// author is excluded — the REST POST that created the message already returned
+// it to them, so echoing it back would just force the client to de-dupe.
+func (h *Hub) BroadcastChatMessage(roomID uuid.UUID, msg rooms.Message) {
+	exclude := msg.UserID
+	h.broadcast(roomID, MsgChat, ChatPayload{Message: msg}, &exclude)
+}
+
 func (h *Hub) BroadcastRoomEnded(roomID uuid.UUID) {
 	rs := h.roomFor(roomID, false)
 	if rs == nil {
@@ -374,4 +382,3 @@ func sendTo(c *client, t string, payload any) {
 	}
 	c.enqueue(data)
 }
-
