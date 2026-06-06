@@ -26,6 +26,7 @@ func (h *Handlers) Routes(r chi.Router) {
 	r.Post("/", h.create)
 	r.Post("/join", h.join)
 	r.Get("/{roomID}", h.get)
+	r.Put("/{roomID}/name", h.rename)
 	r.Post("/{roomID}/leave", h.leave)
 	r.Put("/{roomID}/destination", h.putDestination)
 	r.Delete("/{roomID}/destination", h.deleteDestination)
@@ -160,6 +161,30 @@ func (h *Handlers) leave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type renameReq struct {
+	Name string `json:"name"`
+}
+
+func (h *Handlers) rename(w http.ResponseWriter, r *http.Request) {
+	actor, _ := auth.FromContext(r.Context())
+	roomID, err := uuid.Parse(chi.URLParam(r, "roomID"))
+	if err != nil {
+		httpx.WriteErr(w, httpx.ErrBadRequest)
+		return
+	}
+	var req renameReq
+	if err := httpx.Decode(r, &req); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	room, err := h.svc.Rename(r.Context(), roomID, actor.ID, req.Name)
+	if err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, room)
 }
 
 type muteReq struct {

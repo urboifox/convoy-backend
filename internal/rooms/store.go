@@ -205,6 +205,20 @@ func (s *Store) SetDestination(ctx context.Context, roomID, setBy uuid.UUID, lat
 	return &d, err
 }
 
+func (s *Store) UpdateName(ctx context.Context, roomID uuid.UUID, name *string) (*Room, error) {
+	var r Room
+	err := s.pool.QueryRow(ctx,
+		`UPDATE rooms SET name = $2
+		 WHERE id = $1 AND ended_at IS NULL
+		 RETURNING id, code, name, owner_id, created_at, ended_at`,
+		roomID, name,
+	).Scan(&r.ID, &r.Code, &r.Name, &r.OwnerID, &r.CreatedAt, &r.EndedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return &r, err
+}
+
 func (s *Store) ClearDestination(ctx context.Context, roomID uuid.UUID) error {
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE rooms SET dest_lat = NULL, dest_lng = NULL, dest_set_at = NULL, dest_set_by = NULL

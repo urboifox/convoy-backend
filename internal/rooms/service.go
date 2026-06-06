@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -21,6 +22,7 @@ type Broadcaster interface {
 	KickConnection(roomID, userID uuid.UUID, byUserID uuid.UUID)
 	BroadcastRoomEnded(roomID uuid.UUID)
 	BroadcastDestination(roomID uuid.UUID, dest *Destination)
+	BroadcastRoomRenamed(roomID uuid.UUID, name *string)
 	DisconnectUser(roomID, userID uuid.UUID)
 	// PresentUserIDs returns the users currently connected to the room's
 	// websocket. Used by REST handlers so /rooms/active and /rooms/:id can
@@ -42,8 +44,17 @@ func NewService(store *Store, rt Broadcaster) *Service {
 	return &Service{store: store, rt: rt}
 }
 
-const codeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+// Numeric-only codes so they're easy to read out loud and type on a phone
+// keypad. 6 digits => 1,000,000 combinations; collisions are only possible
+// among *active* rooms (partial unique index), so the retry loop below is
+// more than enough headroom in practice.
+const codeAlphabet = "0123456789"
 const maxCodeAttempts = 8
+
+const (
+	minRoomNameLen = 1
+	maxRoomNameLen = 40
+)
 
 func generateCode() (string, error) {
 	max := big.NewInt(int64(len(codeAlphabet)))
@@ -169,6 +180,26 @@ func (s *Service) ClearDestination(ctx context.Context, roomID, actorID uuid.UUI
 		s.rt.BroadcastDestination(roomID, nil)
 	}
 	return nil
+}
+
+// Rename sets a human-friendly name on the room. Owner-only; broadcasts the
+// new name to every connected member so their UI updates live.
+func (s *Service) Rename(ctx context.Context, roomID, actorID uuid.UUID, name string) (*Room, error) {
+	if err := s.requireOwner(ctx, roomID, actorID); err != nil {
+		return nil, err
+	}
+	name = strings.TrimSpace(name)
+	if n := utf8.RuneCountInString(name); n < minRoomNameLen || n > maxRoomNameLen {
+		return nil, httpx.Err(http.StatusBadRequest, "invalid_name", "room name must be 1–40 characters")
+	}
+	room, err := s.store.UpdateName(ctx, roomID, &name)
+	if err != nil {
+		return nil, err
+	}
+	if s.rt != nil {
+		s.rt.BroadcastRoomRenamed(roomID, room.Name)
+	}
+	return room, nil
 }
 
 func (s *Service) Leave(ctx context.Context, roomID, userID uuid.UUID) error {

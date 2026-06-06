@@ -340,6 +340,10 @@ func (h *Hub) BroadcastDestination(roomID uuid.UUID, dest *rooms.Destination) {
 	h.broadcast(roomID, MsgDestination, DestinationPayload{Destination: dest}, nil)
 }
 
+func (h *Hub) BroadcastRoomRenamed(roomID uuid.UUID, name *string) {
+	h.broadcast(roomID, MsgRoomRenamed, RoomRenamedPayload{Name: name}, nil)
+}
+
 func (h *Hub) BroadcastRoomEnded(roomID uuid.UUID) {
 	rs := h.roomFor(roomID, false)
 	if rs == nil {

@@ -18,6 +18,7 @@ const (
 	MsgMuted         = "muted"
 	MsgKicked        = "kicked"
 	MsgRoomEnded     = "room_ended"
+	MsgRoomRenamed   = "room_renamed"
 	MsgDestination   = "destination"
 	MsgEmergency     = "emergency"
 	MsgError         = "error"
@@ -70,6 +71,10 @@ type SnapshotPayload struct {
 
 type DestinationPayload struct {
 	Destination *rooms.Destination `json:"destination"`
+}
+
+type RoomRenamedPayload struct {
+	Name *string `json:"name"`
 }
 
 type MemberJoinedPayload struct {
