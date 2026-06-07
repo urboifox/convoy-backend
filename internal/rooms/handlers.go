@@ -31,10 +31,16 @@ func (h *Handlers) Routes(r chi.Router) {
 	r.Post("/{roomID}/leave", h.leave)
 	r.Put("/{roomID}/destination", h.putDestination)
 	r.Delete("/{roomID}/destination", h.deleteDestination)
+	r.Put("/{roomID}/personal-marker", h.putPersonalMarker)
+	r.Delete("/{roomID}/personal-marker", h.deletePersonalMarker)
+	r.Post("/{roomID}/stops", h.addStop)
+	r.Delete("/{roomID}/stops", h.clearStops)
+	r.Delete("/{roomID}/stops/{stopID}", h.removeStop)
 	r.Get("/{roomID}/messages", h.listMessages)
 	r.Post("/{roomID}/messages", h.postMessage)
 	r.Post("/{roomID}/members/{userID}/mute", h.mute)
 	r.Post("/{roomID}/members/{userID}/kick", h.kick)
+	r.Post("/{roomID}/members/{userID}/owner", h.transferOwner)
 	r.Delete("/{roomID}", h.end)
 	r.Post("/{roomID}/voice/token", h.voiceToken)
 }
@@ -97,7 +103,7 @@ func (h *Handlers) create(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteErr(w, err)
 		return
 	}
-	detail, err := h.svc.Detail(r.Context(), room.ID)
+	detail, err := h.svc.Detail(r.Context(), room.ID, user.ID)
 	if err != nil {
 		httpx.WriteErr(w, err)
 		return
@@ -121,7 +127,7 @@ func (h *Handlers) join(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteErr(w, err)
 		return
 	}
-	detail, err := h.svc.Detail(r.Context(), room.ID)
+	detail, err := h.svc.Detail(r.Context(), room.ID, user.ID)
 	if err != nil {
 		httpx.WriteErr(w, err)
 		return
@@ -140,7 +146,7 @@ func (h *Handlers) get(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteErr(w, err)
 		return
 	}
-	detail, err := h.svc.Detail(r.Context(), roomID)
+	detail, err := h.svc.Detail(r.Context(), roomID, user.ID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			httpx.WriteErr(w, httpx.ErrNotFound)
@@ -237,6 +243,25 @@ func (h *Handlers) kick(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *Handlers) transferOwner(w http.ResponseWriter, r *http.Request) {
+	actor, _ := auth.FromContext(r.Context())
+	roomID, err := uuid.Parse(chi.URLParam(r, "roomID"))
+	if err != nil {
+		httpx.WriteErr(w, httpx.ErrBadRequest)
+		return
+	}
+	targetID, err := uuid.Parse(chi.URLParam(r, "userID"))
+	if err != nil {
+		httpx.WriteErr(w, httpx.ErrBadRequest)
+		return
+	}
+	if err := h.svc.TransferOwnership(r.Context(), roomID, actor.ID, targetID); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 type destinationReq struct {
 	Lat float64 `json:"lat"`
 	Lng float64 `json:"lng"`
@@ -270,6 +295,105 @@ func (h *Handlers) deleteDestination(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.ClearDestination(r.Context(), roomID, actor.ID); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type personalMarkerReq struct {
+	Lat   float64 `json:"lat"`
+	Lng   float64 `json:"lng"`
+	Label *string `json:"label,omitempty"`
+}
+
+func (h *Handlers) putPersonalMarker(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.FromContext(r.Context())
+	roomID, err := uuid.Parse(chi.URLParam(r, "roomID"))
+	if err != nil {
+		httpx.WriteErr(w, httpx.ErrBadRequest)
+		return
+	}
+	var req personalMarkerReq
+	if err := httpx.Decode(r, &req); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	pm, err := h.svc.SetPersonalMarker(r.Context(), roomID, user.ID, req.Lat, req.Lng, req.Label)
+	if err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, pm)
+}
+
+func (h *Handlers) deletePersonalMarker(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.FromContext(r.Context())
+	roomID, err := uuid.Parse(chi.URLParam(r, "roomID"))
+	if err != nil {
+		httpx.WriteErr(w, httpx.ErrBadRequest)
+		return
+	}
+	if err := h.svc.ClearPersonalMarker(r.Context(), roomID, user.ID); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type addStopReq struct {
+	Lat   float64 `json:"lat"`
+	Lng   float64 `json:"lng"`
+	Label *string `json:"label,omitempty"`
+}
+
+func (h *Handlers) addStop(w http.ResponseWriter, r *http.Request) {
+	actor, _ := auth.FromContext(r.Context())
+	roomID, err := uuid.Parse(chi.URLParam(r, "roomID"))
+	if err != nil {
+		httpx.WriteErr(w, httpx.ErrBadRequest)
+		return
+	}
+	var req addStopReq
+	if err := httpx.Decode(r, &req); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	stop, err := h.svc.AddStop(r.Context(), roomID, actor.ID, req.Lat, req.Lng, req.Label)
+	if err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, stop)
+}
+
+func (h *Handlers) removeStop(w http.ResponseWriter, r *http.Request) {
+	actor, _ := auth.FromContext(r.Context())
+	roomID, err := uuid.Parse(chi.URLParam(r, "roomID"))
+	if err != nil {
+		httpx.WriteErr(w, httpx.ErrBadRequest)
+		return
+	}
+	stopID, err := uuid.Parse(chi.URLParam(r, "stopID"))
+	if err != nil {
+		httpx.WriteErr(w, httpx.ErrBadRequest)
+		return
+	}
+	if err := h.svc.RemoveStop(r.Context(), roomID, actor.ID, stopID); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) clearStops(w http.ResponseWriter, r *http.Request) {
+	actor, _ := auth.FromContext(r.Context())
+	roomID, err := uuid.Parse(chi.URLParam(r, "roomID"))
+	if err != nil {
+		httpx.WriteErr(w, httpx.ErrBadRequest)
+		return
+	}
+	if err := h.svc.ClearStops(r.Context(), roomID, actor.ID); err != nil {
 		httpx.WriteErr(w, err)
 		return
 	}

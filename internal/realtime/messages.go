@@ -19,7 +19,9 @@ const (
 	MsgKicked        = "kicked"
 	MsgRoomEnded     = "room_ended"
 	MsgRoomRenamed   = "room_renamed"
+	MsgOwnerChanged  = "owner_changed"
 	MsgDestination   = "destination"
+	MsgStops         = "stops"
 	MsgChat          = "chat"
 	MsgEmergency     = "emergency"
 	MsgError         = "error"
@@ -58,6 +60,9 @@ type SnapshotPayload struct {
 	Members     []rooms.Member              `json:"members"`
 	Locations   map[uuid.UUID]LocationEvent `json:"locations"`
 	Destination *rooms.Destination          `json:"destination,omitempty"`
+	// Stops are the room's shared, ordered rest points. Always present (possibly
+	// empty) so a reconnecting client replaces its copy from the snapshot.
+	Stops []rooms.Stop `json:"stops"`
 	// PresentUserIDs lists the members currently connected to the room socket.
 	// Members that exist in `Members` but are absent from this list have the
 	// room in their list of active convoys but are not on the room screen
@@ -74,8 +79,17 @@ type DestinationPayload struct {
 	Destination *rooms.Destination `json:"destination"`
 }
 
+type StopsPayload struct {
+	Stops []rooms.Stop `json:"stops"`
+}
+
 type RoomRenamedPayload struct {
 	Name *string `json:"name"`
+}
+
+type OwnerChangedPayload struct {
+	NewOwnerID uuid.UUID `json:"newOwnerId"`
+	OldOwnerID uuid.UUID `json:"oldOwnerId"`
 }
 
 type ChatPayload struct {

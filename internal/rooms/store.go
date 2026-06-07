@@ -234,6 +234,168 @@ func (s *Store) ClearDestination(ctx context.Context, roomID uuid.UUID) error {
 	return nil
 }
 
+// GetPersonalMarker returns the viewer's own private pin for a room, or nil if
+// they haven't placed one. Scoped to (room, user) — never returns another
+// member's marker.
+func (s *Store) GetPersonalMarker(ctx context.Context, roomID, userID uuid.UUID) (*PersonalMarker, error) {
+	var pm PersonalMarker
+	err := s.pool.QueryRow(ctx,
+		`SELECT lat, lng, label, updated_at
+		 FROM personal_markers WHERE room_id = $1 AND user_id = $2`,
+		roomID, userID,
+	).Scan(&pm.Lat, &pm.Lng, &pm.Label, &pm.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &pm, nil
+}
+
+// UpsertPersonalMarker creates or moves the viewer's private pin in place.
+func (s *Store) UpsertPersonalMarker(ctx context.Context, roomID, userID uuid.UUID, lat, lng float64, label *string) (*PersonalMarker, error) {
+	var pm PersonalMarker
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO personal_markers (room_id, user_id, lat, lng, label, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, now())
+		 ON CONFLICT (room_id, user_id) DO UPDATE
+		 SET lat = EXCLUDED.lat, lng = EXCLUDED.lng, label = EXCLUDED.label, updated_at = now()
+		 RETURNING lat, lng, label, updated_at`,
+		roomID, userID, lat, lng, label,
+	).Scan(&pm.Lat, &pm.Lng, &pm.Label, &pm.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &pm, nil
+}
+
+// DeletePersonalMarker removes the viewer's private pin. A no-op (no error) if
+// they didn't have one.
+func (s *Store) DeletePersonalMarker(ctx context.Context, roomID, userID uuid.UUID) error {
+	_, err := s.pool.Exec(ctx,
+		`DELETE FROM personal_markers WHERE room_id = $1 AND user_id = $2`,
+		roomID, userID,
+	)
+	return err
+}
+
+// ListStops returns a room's shared stops in route order (ascending position,
+// then insertion time to break ties).
+func (s *Store) ListStops(ctx context.Context, roomID uuid.UUID) ([]Stop, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, room_id, lat, lng, label, position, created_by, created_at
+		 FROM room_stops WHERE room_id = $1
+		 ORDER BY position ASC, created_at ASC`, roomID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]Stop, 0)
+	for rows.Next() {
+		var st Stop
+		if err := rows.Scan(&st.ID, &st.RoomID, &st.Lat, &st.Lng, &st.Label, &st.Position, &st.CreatedBy, &st.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, st)
+	}
+	return out, rows.Err()
+}
+
+// AddStop appends a stop at the end of the room's ordered list. The new
+// position is one past the current max (0 for the first stop).
+func (s *Store) AddStop(ctx context.Context, roomID, createdBy uuid.UUID, lat, lng float64, label *string) (*Stop, error) {
+	var st Stop
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO room_stops (room_id, lat, lng, label, position, created_by)
+		 VALUES ($1, $2, $3, $4,
+		     COALESCE((SELECT MAX(position) + 1 FROM room_stops WHERE room_id = $1), 0),
+		     $5)
+		 RETURNING id, room_id, lat, lng, label, position, created_by, created_at`,
+		roomID, lat, lng, label, createdBy,
+	).Scan(&st.ID, &st.RoomID, &st.Lat, &st.Lng, &st.Label, &st.Position, &st.CreatedBy, &st.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &st, nil
+}
+
+// ClearStops removes every stop in a room. Used when the destination — and so
+// the whole planned route — is cleared.
+func (s *Store) ClearStops(ctx context.Context, roomID uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM room_stops WHERE room_id = $1`, roomID)
+	return err
+}
+
+// RemoveStop deletes a stop. Scoped to roomID so a stop id from another room
+// can't be removed. Returns ErrNotFound when nothing matched.
+func (s *Store) RemoveStop(ctx context.Context, roomID, stopID uuid.UUID) error {
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM room_stops WHERE id = $1 AND room_id = $2`, stopID, roomID,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// TransferOwnership hands the room to another active member: it points
+// rooms.owner_id at the new owner and swaps the two members' roles, all in one
+// transaction. The new owner must be an active, non-kicked member (ErrNotFound
+// otherwise).
+func (s *Store) TransferOwnership(ctx context.Context, roomID, oldOwnerID, newOwnerID uuid.UUID) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var exists bool
+	if err := tx.QueryRow(ctx,
+		`SELECT EXISTS(
+		     SELECT 1 FROM room_members
+		     WHERE room_id = $1 AND user_id = $2 AND left_at IS NULL AND kicked = FALSE
+		 )`,
+		roomID, newOwnerID,
+	).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return ErrNotFound
+	}
+
+	tag, err := tx.Exec(ctx,
+		`UPDATE rooms SET owner_id = $2 WHERE id = $1 AND ended_at IS NULL`,
+		roomID, newOwnerID,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE room_members SET role = $3 WHERE room_id = $1 AND user_id = $2`,
+		roomID, newOwnerID, RoleOwner,
+	); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE room_members SET role = $3 WHERE room_id = $1 AND user_id = $2`,
+		roomID, oldOwnerID, RoleMember,
+	); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
 // ActiveMembership returns the user's row in the room iff they are an active, non-kicked member.
 func (s *Store) ActiveMembership(ctx context.Context, roomID, userID uuid.UUID) (role string, muted bool, err error) {
 	err = s.pool.QueryRow(ctx,

@@ -210,6 +210,10 @@ func (h *Hub) snapshot(ctx context.Context, roomID, selfID uuid.UUID) (SnapshotP
 	if err != nil {
 		return SnapshotPayload{}, err
 	}
+	stops, err := h.store.ListStops(ctx, roomID)
+	if err != nil {
+		return SnapshotPayload{}, err
+	}
 	rs := h.roomFor(roomID, true)
 	rs.mu.RLock()
 	locs := make(map[uuid.UUID]LocationEvent, len(rs.locations))
@@ -230,6 +234,7 @@ func (h *Hub) snapshot(ctx context.Context, roomID, selfID uuid.UUID) (SnapshotP
 		Members:          members,
 		Locations:        locs,
 		Destination:      dest,
+		Stops:            stops,
 		PresentUserIDs:   present,
 		EmergencyUserIDs: emergencies,
 	}, nil
@@ -340,8 +345,20 @@ func (h *Hub) BroadcastDestination(roomID uuid.UUID, dest *rooms.Destination) {
 	h.broadcast(roomID, MsgDestination, DestinationPayload{Destination: dest}, nil)
 }
 
+// BroadcastStops fans the room's full ordered stop list out to everyone. Sent
+// as the whole list (not deltas) so clients just replace their copy.
+func (h *Hub) BroadcastStops(roomID uuid.UUID, stops []rooms.Stop) {
+	h.broadcast(roomID, MsgStops, StopsPayload{Stops: stops}, nil)
+}
+
 func (h *Hub) BroadcastRoomRenamed(roomID uuid.UUID, name *string) {
 	h.broadcast(roomID, MsgRoomRenamed, RoomRenamedPayload{Name: name}, nil)
+}
+
+// BroadcastOwnerChanged announces that the room owner changed. Sent to everyone
+// (including both parties) so each client re-derives who may edit shared state.
+func (h *Hub) BroadcastOwnerChanged(roomID, newOwnerID, oldOwnerID uuid.UUID) {
+	h.broadcast(roomID, MsgOwnerChanged, OwnerChangedPayload{NewOwnerID: newOwnerID, OldOwnerID: oldOwnerID}, nil)
 }
 
 // BroadcastChatMessage fans a freshly-posted chat line out to the room. The
