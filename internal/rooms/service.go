@@ -60,8 +60,10 @@ const (
 )
 
 // Marker labels (POI names) are cosmetic, so an over-long one is trimmed rather
-// than rejected — the placement still succeeds.
+// than rejected — the placement still succeeds. Destination notes allow a short
+// description, so they get a roomier cap.
 const maxMarkerLabelLen = 120
+const maxDestNotesLen = 500
 
 const (
 	maxMessageLen = 2000
@@ -84,6 +86,22 @@ func trimLabel(label *string) *string {
 	}
 	if utf8.RuneCountInString(v) > maxMarkerLabelLen {
 		v = string([]rune(v)[:maxMarkerLabelLen])
+	}
+	return &v
+}
+
+// trimNotes is trimLabel for the destination note — same normalisation, just a
+// larger length cap so a short description fits.
+func trimNotes(notes *string) *string {
+	if notes == nil {
+		return nil
+	}
+	v := strings.TrimSpace(*notes)
+	if v == "" {
+		return nil
+	}
+	if utf8.RuneCountInString(v) > maxDestNotesLen {
+		v = string([]rune(v)[:maxDestNotesLen])
 	}
 	return &v
 }
@@ -195,14 +213,31 @@ func (s *Service) ListActiveForUser(ctx context.Context, userID uuid.UUID) ([]Ac
 	return rooms, nil
 }
 
-func (s *Service) SetDestination(ctx context.Context, roomID, actorID uuid.UUID, lat, lng float64) (*Destination, error) {
+func (s *Service) SetDestination(ctx context.Context, roomID, actorID uuid.UUID, lat, lng float64, name, notes *string) (*Destination, error) {
 	if err := s.requireOwner(ctx, roomID, actorID); err != nil {
 		return nil, err
 	}
 	if lat < -90 || lat > 90 || lng < -180 || lng > 180 {
 		return nil, httpx.Err(http.StatusBadRequest, "invalid_coords", "invalid coordinates")
 	}
-	d, err := s.store.SetDestination(ctx, roomID, actorID, lat, lng)
+	d, err := s.store.SetDestination(ctx, roomID, actorID, lat, lng, trimLabel(name), trimNotes(notes))
+	if err != nil {
+		return nil, err
+	}
+	if s.rt != nil {
+		s.rt.BroadcastDestination(roomID, d)
+	}
+	return d, nil
+}
+
+// UpdateDestinationMeta edits the current destination's name/notes without
+// moving the pin. Owner-only. Both fields are replaced wholesale (the client
+// sends the full edited values), so passing nil/blank clears that field.
+func (s *Service) UpdateDestinationMeta(ctx context.Context, roomID, actorID uuid.UUID, name, notes *string) (*Destination, error) {
+	if err := s.requireOwner(ctx, roomID, actorID); err != nil {
+		return nil, err
+	}
+	d, err := s.store.UpdateDestinationMeta(ctx, roomID, trimLabel(name), trimNotes(notes))
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +384,7 @@ func (s *Service) TransferOwnership(ctx context.Context, roomID, actorID, target
 	// they keep it after handing over. Best-effort — never block the transfer
 	// on this bookkeeping.
 	if dest, err := s.store.GetDestination(ctx, roomID); err == nil && dest != nil {
-		_, _ = s.store.UpsertPersonalMarker(ctx, roomID, actorID, dest.Lat, dest.Lng, nil)
+		_, _ = s.store.UpsertPersonalMarker(ctx, roomID, actorID, dest.Lat, dest.Lng, dest.Name)
 	}
 
 	if err := s.store.TransferOwnership(ctx, roomID, actorID, targetID); err != nil {

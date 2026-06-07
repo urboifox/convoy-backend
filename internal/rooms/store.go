@@ -3,7 +3,6 @@ package rooms
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -174,31 +173,46 @@ func (s *Store) ListMembers(ctx context.Context, roomID uuid.UUID) ([]Member, er
 }
 
 func (s *Store) GetDestination(ctx context.Context, roomID uuid.UUID) (*Destination, error) {
-	var lat, lng float64
-	var setAt time.Time
-	var setBy uuid.UUID
+	var d Destination
 	err := s.pool.QueryRow(ctx,
-		`SELECT dest_lat, dest_lng, dest_set_at, dest_set_by
+		`SELECT dest_lat, dest_lng, dest_name, dest_notes, dest_set_at, dest_set_by
 		 FROM rooms WHERE id = $1 AND dest_lat IS NOT NULL AND dest_lng IS NOT NULL`,
 		roomID,
-	).Scan(&lat, &lng, &setAt, &setBy)
+	).Scan(&d.Lat, &d.Lng, &d.Name, &d.Notes, &d.SetAt, &d.SetBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &Destination{Lat: lat, Lng: lng, SetAt: setAt, SetBy: setBy}, nil
+	return &d, nil
 }
 
-func (s *Store) SetDestination(ctx context.Context, roomID, setBy uuid.UUID, lat, lng float64) (*Destination, error) {
+func (s *Store) SetDestination(ctx context.Context, roomID, setBy uuid.UUID, lat, lng float64, name, notes *string) (*Destination, error) {
 	var d Destination
 	err := s.pool.QueryRow(ctx,
-		`UPDATE rooms SET dest_lat = $2, dest_lng = $3, dest_set_at = now(), dest_set_by = $4
+		`UPDATE rooms SET dest_lat = $2, dest_lng = $3, dest_name = $4, dest_notes = $5, dest_set_at = now(), dest_set_by = $6
 		 WHERE id = $1 AND ended_at IS NULL
-		 RETURNING dest_lat, dest_lng, dest_set_at, dest_set_by`,
-		roomID, lat, lng, setBy,
-	).Scan(&d.Lat, &d.Lng, &d.SetAt, &d.SetBy)
+		 RETURNING dest_lat, dest_lng, dest_name, dest_notes, dest_set_at, dest_set_by`,
+		roomID, lat, lng, name, notes, setBy,
+	).Scan(&d.Lat, &d.Lng, &d.Name, &d.Notes, &d.SetAt, &d.SetBy)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return &d, err
+}
+
+// UpdateDestinationMeta rewrites just the destination's name/notes, leaving the
+// pin (and set_at/set_by) untouched. Returns ErrNotFound if no destination is
+// currently set, so an edit can't resurrect a cleared destination.
+func (s *Store) UpdateDestinationMeta(ctx context.Context, roomID uuid.UUID, name, notes *string) (*Destination, error) {
+	var d Destination
+	err := s.pool.QueryRow(ctx,
+		`UPDATE rooms SET dest_name = $2, dest_notes = $3
+		 WHERE id = $1 AND ended_at IS NULL AND dest_lat IS NOT NULL AND dest_lng IS NOT NULL
+		 RETURNING dest_lat, dest_lng, dest_name, dest_notes, dest_set_at, dest_set_by`,
+		roomID, name, notes,
+	).Scan(&d.Lat, &d.Lng, &d.Name, &d.Notes, &d.SetAt, &d.SetBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}

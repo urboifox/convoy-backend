@@ -30,8 +30,13 @@ type Member struct {
 }
 
 type Destination struct {
-	Lat   float64   `json:"lat"`
-	Lng   float64   `json:"lng"`
+	Lat float64 `json:"lat"`
+	Lng float64 `json:"lng"`
+	// Name is a human-readable place name (a tapped POI's name, or a reverse-
+	// geocoded label for a blank drop). Notes is an optional owner-authored
+	// description. Both are nullable and purely cosmetic.
+	Name  *string   `json:"name,omitempty"`
+	Notes *string   `json:"notes,omitempty"`
 	SetAt time.Time `json:"setAt"`
 	SetBy uuid.UUID `json:"setBy"`
 }

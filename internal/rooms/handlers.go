@@ -30,6 +30,7 @@ func (h *Handlers) Routes(r chi.Router) {
 	r.Put("/{roomID}/name", h.rename)
 	r.Post("/{roomID}/leave", h.leave)
 	r.Put("/{roomID}/destination", h.putDestination)
+	r.Patch("/{roomID}/destination", h.patchDestination)
 	r.Delete("/{roomID}/destination", h.deleteDestination)
 	r.Put("/{roomID}/personal-marker", h.putPersonalMarker)
 	r.Delete("/{roomID}/personal-marker", h.deletePersonalMarker)
@@ -263,8 +264,18 @@ func (h *Handlers) transferOwner(w http.ResponseWriter, r *http.Request) {
 }
 
 type destinationReq struct {
-	Lat float64 `json:"lat"`
-	Lng float64 `json:"lng"`
+	Lat   float64 `json:"lat"`
+	Lng   float64 `json:"lng"`
+	Name  *string `json:"name"`
+	Notes *string `json:"notes"`
+}
+
+// destinationMetaReq is the body for editing a set destination's name/notes
+// without moving it. Both fields are sent in full by the client; omitting one
+// (or sending blank) clears it.
+type destinationMetaReq struct {
+	Name  *string `json:"name"`
+	Notes *string `json:"notes"`
 }
 
 func (h *Handlers) putDestination(w http.ResponseWriter, r *http.Request) {
@@ -279,7 +290,27 @@ func (h *Handlers) putDestination(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteErr(w, err)
 		return
 	}
-	d, err := h.svc.SetDestination(r.Context(), roomID, actor.ID, req.Lat, req.Lng)
+	d, err := h.svc.SetDestination(r.Context(), roomID, actor.ID, req.Lat, req.Lng, req.Name, req.Notes)
+	if err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, d)
+}
+
+func (h *Handlers) patchDestination(w http.ResponseWriter, r *http.Request) {
+	actor, _ := auth.FromContext(r.Context())
+	roomID, err := uuid.Parse(chi.URLParam(r, "roomID"))
+	if err != nil {
+		httpx.WriteErr(w, httpx.ErrBadRequest)
+		return
+	}
+	var req destinationMetaReq
+	if err := httpx.Decode(r, &req); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	d, err := h.svc.UpdateDestinationMeta(r.Context(), roomID, actor.ID, req.Name, req.Notes)
 	if err != nil {
 		httpx.WriteErr(w, err)
 		return
