@@ -358,6 +358,26 @@ func (s *Store) RemoveStop(ctx context.Context, roomID, stopID uuid.UUID) error 
 	return nil
 }
 
+// UpdateStopLabel sets (or, with a nil label, clears) a stop's custom title.
+// Scoped to roomID so a stop id from another room can't be edited. Returns
+// ErrNotFound when nothing matched.
+func (s *Store) UpdateStopLabel(ctx context.Context, roomID, stopID uuid.UUID, label *string) (*Stop, error) {
+	var st Stop
+	err := s.pool.QueryRow(ctx,
+		`UPDATE room_stops SET label = $3
+		 WHERE id = $1 AND room_id = $2
+		 RETURNING id, room_id, lat, lng, label, position, created_by, created_at`,
+		stopID, roomID, label,
+	).Scan(&st.ID, &st.RoomID, &st.Lat, &st.Lng, &st.Label, &st.Position, &st.CreatedBy, &st.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &st, nil
+}
+
 // TransferOwnership hands the room to another active member: it points
 // rooms.owner_id at the new owner and swaps the two members' roles, all in one
 // transaction. The new owner must be an active, non-kicked member (ErrNotFound

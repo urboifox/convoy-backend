@@ -36,6 +36,7 @@ func (h *Handlers) Routes(r chi.Router) {
 	r.Delete("/{roomID}/personal-marker", h.deletePersonalMarker)
 	r.Post("/{roomID}/stops", h.addStop)
 	r.Delete("/{roomID}/stops", h.clearStops)
+	r.Patch("/{roomID}/stops/{stopID}", h.patchStop)
 	r.Delete("/{roomID}/stops/{stopID}", h.removeStop)
 	r.Get("/{roomID}/messages", h.listMessages)
 	r.Post("/{roomID}/messages", h.postMessage)
@@ -396,6 +397,35 @@ func (h *Handlers) addStop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusCreated, stop)
+}
+
+type updateStopReq struct {
+	Label *string `json:"label,omitempty"`
+}
+
+func (h *Handlers) patchStop(w http.ResponseWriter, r *http.Request) {
+	actor, _ := auth.FromContext(r.Context())
+	roomID, err := uuid.Parse(chi.URLParam(r, "roomID"))
+	if err != nil {
+		httpx.WriteErr(w, httpx.ErrBadRequest)
+		return
+	}
+	stopID, err := uuid.Parse(chi.URLParam(r, "stopID"))
+	if err != nil {
+		httpx.WriteErr(w, httpx.ErrBadRequest)
+		return
+	}
+	var req updateStopReq
+	if err := httpx.Decode(r, &req); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	stop, err := h.svc.UpdateStopLabel(r.Context(), roomID, actor.ID, stopID, req.Label)
+	if err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, stop)
 }
 
 func (h *Handlers) removeStop(w http.ResponseWriter, r *http.Request) {

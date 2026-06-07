@@ -304,6 +304,20 @@ func (s *Service) AddStop(ctx context.Context, roomID, actorID uuid.UUID, lat, l
 	return stop, nil
 }
 
+// UpdateStopLabel sets a custom title on an existing stop without moving it.
+// Owner-only; broadcasts the new ordered list so every client converges.
+func (s *Service) UpdateStopLabel(ctx context.Context, roomID, actorID, stopID uuid.UUID, label *string) (*Stop, error) {
+	if err := s.requireOwner(ctx, roomID, actorID); err != nil {
+		return nil, err
+	}
+	stop, err := s.store.UpdateStopLabel(ctx, roomID, stopID, trimLabel(label))
+	if err != nil {
+		return nil, err
+	}
+	s.broadcastStops(ctx, roomID)
+	return stop, nil
+}
+
 // RemoveStop deletes a shared rest point. Owner-only; broadcasts the new list.
 func (s *Service) RemoveStop(ctx context.Context, roomID, actorID, stopID uuid.UUID) error {
 	if err := s.requireOwner(ctx, roomID, actorID); err != nil {
